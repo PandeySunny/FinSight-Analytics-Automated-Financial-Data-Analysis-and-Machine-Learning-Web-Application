@@ -4,171 +4,722 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Analysis Results | DataInsight Analytics</title>
-  <meta name="description" content="Comprehensive data analysis results with visualizations">
+  <title>Analysis Results | FinSight Analytics</title>
+  <meta name="description" content="Financial data analysis results — EDA, ML models, KPIs, and AI insights.">
   <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
 </head>
 
-<body>
+<body class="results-page">
+
   <!-- Navigation -->
   <nav class="navbar">
     <div class="container">
       <a href="{{ url_for('index') }}" class="nav-brand">
         <i class="fas fa-chart-line"></i>
-        <span>DataInsight Analytics</span>
+        Fin<span class="brand-accent">Sight</span>
       </a>
       <div class="nav-links">
-        <a href="{{ url_for('index') }}#features">Features</a>
-        <a href="{{ url_for('index') }}#how-it-works">How It Works</a>
-        <a href="{{ url_for('upload_file') }}" class="nav-cta">New Analysis</a>
+        <a href="{{ url_for('upload_file') }}">
+          <i class="fas fa-upload"></i> New Analysis
+        </a>
+        <a href="{{ url_for('index') }}" class="nav-cta">
+          <i class="fas fa-home"></i> Home
+        </a>
       </div>
     </div>
   </nav>
 
-  <div class="container">
-    <!-- Page Header -->
-    <div style="text-align: center; margin: 2rem 0;">
-      <h1><i class="fas fa-chart-pie"></i> Analysis Results</h1>
-      <p style="color: var(--gray-600); font-size: 1.125rem;">
-        Comprehensive insights from your dataset
-      </p>
-    </div>
-
-    <!-- Stats Grid -->
-    <div class="stats-grid">
-      <div class="stat-card">
-        <div class="stat-icon"><i class="fas fa-file-alt"></i></div>
-        <div class="stat-label">File Name</div>
-        <div class="stat-value" style="font-size: 1.25rem; word-break: break-all;">{{ filename }}</div>
-      </div>
-
-      <div class="stat-card">
-        <div class="stat-icon"><i class="fas fa-table"></i></div>
-        <div class="stat-label">Total Rows</div>
-        <div class="stat-value">{{ "{:,}".format(rows) }}</div>
-      </div>
-
-      <div class="stat-card">
-        <div class="stat-icon"><i class="fas fa-columns"></i></div>
-        <div class="stat-label">Total Columns</div>
-        <div class="stat-value">{{ cols }}</div>
+  <!-- Results Header -->
+  <div class="results-header">
+    <div class="container">
+      <h1><i class="fas fa-chart-pie" style="color:var(--gold-500);"></i> Financial Analysis Report</h1>
+      <p>End-to-end automated analysis complete — EDA, ML models, and insights generated</p>
+      <div class="results-meta">
+        <span class="results-meta-pill"><i class="fas fa-file-csv"></i> {{ filename }}</span>
+        <span class="results-meta-pill"><i class="fas fa-table"></i> {{ "{:,}".format(rows) }} rows</span>
+        <span class="results-meta-pill"><i class="fas fa-columns"></i> {{ cols }} columns</span>
+        <span class="results-meta-pill"><i class="fas fa-tag"></i> {{ dataset_type | replace('_',' ') | title }}</span>
+        {% if kpis and kpis.fraud_count > 0 %}
+        <span class="fraud-badge"><i class="fas fa-exclamation-triangle"></i> {{ kpis.fraud_count }} Anomalies
+          Flagged</span>
+        {% else %}
+        <span class="safe-badge"><i class="fas fa-shield-alt"></i> No Anomalies</span>
+        {% endif %}
       </div>
     </div>
+  </div>
 
-    <!-- Dataset Summary Section -->
-    <h2><i class="fas fa-list-alt"></i> Dataset Summary</h2>
-    <div class="table-wrapper">
-      {{ summary_html | safe }}
+  <!-- Flash Messages -->
+  {% with messages = get_flashed_messages() %}
+  {% if messages %}
+  <div class="container" style="padding-top: var(--sp-md);">
+    <div class="flash-msg">
+      {% for m in messages %}<p style="margin:2px 0">{{ m }}</p>{% endfor %}
     </div>
+  </div>
+  {% endif %}
+  {% endwith %}
 
-    <!-- Sample Rows Section -->
-    <h2><i class="fas fa-eye"></i> Sample Rows</h2>
-    <div class="table-wrapper">
-      {{ head | safe }}
-    </div>
+  <div class="container" style="padding-top: var(--sp-sm);">
 
-    <!-- Visualizations Section -->
-    <h2><i class="fas fa-chart-bar"></i> Visualizations</h2>
-    {% if plots %}
-    <div class="plots-grid">
-      {% for p in plots %}
-      <div class="plot-card">
-        <img src="{{ p }}" alt="Data visualization chart" loading="lazy" />
+    <!-- Financial KPI Strip -->
+    {% if kpis %}
+    <div class="kpi-strip">
+      <div class="kpi-card gold">
+        <i class="fas fa-layer-group kpi-icon"></i>
+        <div class="kpi-label">Total Records</div>
+        <div class="kpi-value gold">{{ "{:,}".format(kpis.total_records) }}</div>
+        <div class="kpi-sub">After cleaning</div>
       </div>
-      {% endfor %}
-    </div>
-    {% else %}
-    <div class="info">
-      <i class="fas fa-info-circle"></i> No visualizations were generated for this dataset.
-    </div>
-    {% endif %}
 
-    <!-- AI Insights Section -->
-    {% if ai_insights %}
-    <h2><i class="fas fa-brain"></i> AI-Powered Insights</h2>
-    
-    <!-- Overall Summary -->
-    {% if ai_insights.overall_summary %}
-    <div class="insights-card" style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; padding: 1.5rem; border-radius: 8px; margin-bottom: 1.5rem;">
-      <h3 style="margin-top: 0; color: white;"><i class="fas fa-lightbulb"></i> Overall Summary</h3>
-      <p style="font-size: 1.1rem; line-height: 1.6;">{{ ai_insights.overall_summary }}</p>
-    </div>
-    {% endif %}
-    
-    <!-- Key Findings -->
-    {% if ai_insights.key_findings %}
-    <div class="insights-card" style="background: #f8f9fa; padding: 1.5rem; border-left: 4px solid #667eea; border-radius: 4px; margin-bottom: 1.5rem;">
-      <h3 style="margin-top: 0; color: #333;"><i class="fas fa-checkmark-circle"></i> Key Findings</h3>
-      <ul style="list-style: none; padding: 0;">
-        {% for finding in ai_insights.key_findings %}
-        <li style="padding: 0.5rem 0; border-bottom: 1px solid #e0e0e0;">
-          <strong style="color: #667eea;">→</strong> {{ finding }}
-        </li>
-        {% endfor %}
-      </ul>
-    </div>
-    {% endif %}
-    
-    <!-- Anomalies & Segments -->
-    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1.5rem; margin-bottom: 1.5rem;">
-      <!-- Anomalies Insight -->
-      {% if ai_insights.anomalies_insight %}
-      <div class="insights-card" style="background: #fff3cd; padding: 1rem; border-left: 4px solid #ffc107; border-radius: 4px;">
-        <h4 style="margin-top: 0; color: #856404;"><i class="fas fa-exclamation-triangle"></i> Anomaly Insights</h4>
-        <p style="color: #333; margin-bottom: 0;">{{ ai_insights.anomalies_insight }}</p>
+      {% if kpis.total_volume is not none %}
+      <div class="kpi-card gold">
+        <i class="fas fa-dollar-sign kpi-icon"></i>
+        <div class="kpi-label">Total Volume</div>
+        <div class="kpi-value gold">
+          {% if kpis.total_volume|abs >= 1000000 %}
+          {{ "{:.2f}M".format(kpis.total_volume / 1000000) }}
+          {% elif kpis.total_volume|abs >= 1000 %}
+          {{ "{:.2f}K".format(kpis.total_volume / 1000) }}
+          {% else %}
+          {{ "{:,.2f}".format(kpis.total_volume) }}
+          {% endif %}
+        </div>
+        <div class="kpi-sub">{{ kpis.primary_col if kpis.primary_col else 'primary metric' }}</div>
       </div>
       {% endif %}
-      
-      <!-- Segments Insight -->
-      {% if ai_insights.segments_insight %}
-      <div class="insights-card" style="background: #d4edda; padding: 1rem; border-left: 4px solid #28a745; border-radius: 4px;">
-        <h4 style="margin-top: 0; color: #155724;"><i class="fas fa-sitemap"></i> Segment Insights</h4>
-        <p style="color: #333; margin-bottom: 0;">{{ ai_insights.segments_insight }}</p>
+
+      {% if kpis.avg_transaction is not none %}
+      <div class="kpi-card success">
+        <i class="fas fa-chart-line kpi-icon"></i>
+        <div class="kpi-label">Avg Transaction</div>
+        <div class="kpi-value success">{{ "{:,.2f}".format(kpis.avg_transaction) }}</div>
+        <div class="kpi-sub">Mean value</div>
+      </div>
+      {% endif %}
+
+      <div
+        class="kpi-card {% if kpis.fraud_rate_pct > 2 %}danger{% elif kpis.fraud_rate_pct > 0 %}gold{% else %}success{% endif %}">
+        <i class="fas fa-exclamation-triangle kpi-icon"></i>
+        <div class="kpi-label">Fraud / Anomaly Rate</div>
+        <div
+          class="kpi-value {% if kpis.fraud_rate_pct > 2 %}danger{% elif kpis.fraud_rate_pct > 0 %}gold{% else %}success{% endif %}">
+          {{ kpis.fraud_rate_pct }}%
+        </div>
+        <div class="kpi-sub">{{ kpis.fraud_count }} flagged records</div>
+      </div>
+
+      {% if kpis.num_segments > 0 %}
+      <div class="kpi-card">
+        <i class="fas fa-users kpi-icon"></i>
+        <div class="kpi-label">Customer Segments</div>
+        <div class="kpi-value">{{ kpis.num_segments }}</div>
+        <div class="kpi-sub">K-Means clusters</div>
+      </div>
+      {% endif %}
+
+      {% if kpis.pca_variance %}
+      <div class="kpi-card">
+        <i class="fas fa-compress-arrows-alt kpi-icon"></i>
+        <div class="kpi-label">PCA Variance</div>
+        <div class="kpi-value">{{ kpis.pca_variance }}%</div>
+        <div class="kpi-sub">Explained by components</div>
       </div>
       {% endif %}
     </div>
-    
-    <!-- Recommendations -->
-    {% if ai_insights.recommendations %}
-    <div class="insights-card" style="background: #d1ecf1; padding: 1.5rem; border-left: 4px solid #17a2b8; border-radius: 4px;">
-      <h3 style="margin-top: 0; color: #0c5460;"><i class="fas fa-bullseye"></i> Business Recommendations</h3>
-      <ol style="padding-left: 1.5rem; color: #333;">
-        {% for rec in ai_insights.recommendations %}
-        <li style="padding: 0.5rem 0; line-height: 1.6;">{{ rec }}</li>
-        {% endfor %}
-      </ol>
-    </div>
-    {% endif %}
-    
-    <!-- Info Notice -->
-    <div style="background: #e8f4f8; border-left: 4px solid #17a2b8; padding: 1rem; border-radius: 4px; margin-top: 1rem;">
-      <p style="margin: 0; color: #0c5460; font-size: 0.95rem;">
-        <i class="fas fa-info-circle"></i> 
-        <strong>✓ Intelligent Analysis</strong> - These insights are generated using advanced data analysis algorithms (no API calls, always available)
-      </p>
-    </div>
     {% endif %}
 
-    <!-- Action Buttons -->
-    <div class="back">
+    <!-- Tab Navigation -->
+    <div class="tab-nav" id="main-tabs">
+      <button class="tab-btn active" onclick="showTab('eda', this)" id="tab-eda">
+        <i class="fas fa-chart-bar"></i> EDA &amp; Data Quality
+      </button>
+      <button class="tab-btn" onclick="showTab('ml', this)" id="tab-ml">
+        <i class="fas fa-robot"></i> ML Models
+      </button>
+      <button class="tab-btn" onclick="showTab('kpis', this)" id="tab-kpis">
+        <i class="fas fa-coins"></i> Financial KPIs
+      </button>
+      <button class="tab-btn" onclick="showTab('insights', this)" id="tab-insights">
+        <i class="fas fa-lightbulb"></i> AI Insights
+      </button>
+    </div>
+
+    <!-- =================== TAB 1: EDA =================== -->
+    <div class="tab-panel active" id="panel-eda">
+
+      <!-- Column Summary Table -->
+      <div class="panel-section-title"><i class="fas fa-list-alt"></i> Column Summary</div>
+      <div class="table-wrapper">
+        {{ summary_html | safe }}
+      </div>
+
+      <!-- Sample Rows -->
+      <div class="panel-section-title"><i class="fas fa-eye"></i> Sample Data (First 15 Rows)</div>
+      <div class="table-wrapper">
+        {{ head_html | safe }}
+      </div>
+
+      <!-- Distribution & Correlation Charts -->
+      {% if plots %}
+      <div class="panel-section-title"><i class="fas fa-chart-area"></i> Statistical Visualizations</div>
+      <div class="plots-grid">
+        {% for p in plots %}
+        {% if p.category in ('distribution', 'correlation', 'categorical', 'timeseries') %}
+        <div class="plot-card">
+          <div class="plot-card-label">
+            <i class="fas fa-chart-bar" style="color:var(--gold-500);"></i> {{ p.title }}
+          </div>
+          <img src="{{ p.path }}" alt="{{ p.title }}" loading="lazy" />
+        </div>
+        {% endif %}
+        {% endfor %}
+      </div>
+      {% else %}
+      <div class="info-msg"><i class="fas fa-info-circle"></i> No visualizations could be generated for this dataset.
+      </div>
+      {% endif %}
+    </div>
+
+    <!-- =================== TAB 2: ML MODELS =================== -->
+    <div class="tab-panel" id="panel-ml">
+
+      {% if ml_results %}
+
+      <!-- ML Summary Cards -->
+      <div
+        style="display:grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: var(--sp-sm); margin-bottom: var(--sp-lg);">
+        <div class="glass-card" style="text-align:center;">
+          <i class="fas fa-users"
+            style="font-size:2.5rem; color:var(--gold-500); display:block; margin-bottom:10px;"></i>
+          <div style="font-size:2rem; font-weight:800; color:var(--white); font-family:var(--font-mono);">
+            {{ kpis.num_segments if kpis else 'N/A' }}
+          </div>
+          <div style="color:var(--gray-500); font-size:0.8rem; margin-top:4px;">K-Means Clusters Discovered</div>
+          <div style="margin-top: var(--sp-sm); font-size:0.82rem; color:var(--gray-400); line-height:1.6;">
+            Customer/transaction behavioral segments identified using unsupervised machine learning.
+          </div>
+        </div>
+        <div class="glass-card" style="text-align:center;">
+          <i class="fas fa-exclamation-triangle"
+            style="font-size:2.5rem; color:{% if kpis and kpis.fraud_count > 0 %}var(--red-400){% else %}var(--teal-400){% endif %}; display:block; margin-bottom:10px;"></i>
+          <div
+            style="font-size:2rem; font-weight:800; color:{% if kpis and kpis.fraud_count > 0 %}var(--red-400){% else %}var(--teal-400){% endif %}; font-family:var(--font-mono);">
+            {{ kpis.fraud_count if kpis else 0 }}
+          </div>
+          <div style="color:var(--gray-500); font-size:0.8rem; margin-top:4px;">Anomalies Detected (Isolation Forest)
+          </div>
+          <div style="margin-top: var(--sp-sm); font-size:0.82rem; color:var(--gray-400); line-height:1.6;">
+            Records flagged as statistically unusual — potential fraud, errors, or outliers requiring review.
+          </div>
+        </div>
+        <div class="glass-card" style="text-align:center;">
+          <i class="fas fa-compress-arrows-alt"
+            style="font-size:2.5rem; color:var(--teal-500); display:block; margin-bottom:10px;"></i>
+          <div style="font-size:2rem; font-weight:800; color:var(--white); font-family:var(--font-mono);">
+            {% if ml_results.pca and ml_results.pca.coords is not none %}2D{% else %}N/A{% endif %}
+          </div>
+          <div style="color:var(--gray-500); font-size:0.8rem; margin-top:4px;">PCA Dimensionality Reduction</div>
+          <div style="margin-top: var(--sp-sm); font-size:0.82rem; color:var(--gray-400); line-height:1.6;">
+            High-dimensional financial features compressed into 2D principal components for visualization.
+          </div>
+        </div>
+        {% if kpis and kpis.supervised_auc %}
+        <div class="glass-card" style="text-align:center;">
+          <i class="fas fa-brain"
+            style="font-size:2.5rem; color:var(--gold-500); display:block; margin-bottom:10px;"></i>
+          <div style="font-size:2rem; font-weight:800; color:var(--teal-400); font-family:var(--font-mono);">
+            {{ "%.4f"|format(kpis.supervised_auc) }}
+          </div>
+          <div style="color:var(--gray-500); font-size:0.8rem; margin-top:4px;">Fraud Model ROC-AUC</div>
+          <div style="margin-top: var(--sp-sm); font-size:0.82rem; color:var(--gray-400); line-height:1.6;">
+            Gradient Boosting classifier trained on labelled fraud data.
+          </div>
+        </div>
+        {% endif %}
+      </div>
+
+      <!-- ML Technique Descriptions -->
+      <div style="display:grid; grid-template-columns: 1fr 1fr; gap: var(--sp-sm); margin-bottom: var(--sp-md);">
+        <div class="insight-card">
+          <div class="insight-card-title"><i class="fas fa-users"></i> K-Means Clustering</div>
+          <p class="insight-text">
+            Groups financial records into <strong style="color:var(--gold-400);">{{ kpis.num_segments if kpis else 3 }}
+              distinct clusters</strong>
+            based on numeric features (amounts, balances, etc.). Each cluster represents a behavioral segment.
+          </p>
+        </div>
+        <div class="insight-card">
+          <div class="insight-card-title"><i class="fas fa-shield-alt"></i> Isolation Forest</div>
+          <p class="insight-text">
+            Detects anomalous transactions by isolating data points that differ significantly from the majority.
+            <strong style="color:var(--red-400);">{{ kpis.fraud_count if kpis else 0 }} records flagged</strong>
+            at 2% contamination — these warrant manual investigation.
+          </p>
+        </div>
+      </div>
+
+      <!-- ML Plots -->
+      {% if plots %}
+      <div class="panel-section-title"><i class="fas fa-chart-scatter"></i> ML Visualizations</div>
+      <div class="plots-grid">
+        {% for p in plots %}
+        {% if p.category in ('fraud', 'segmentation', 'risk', 'supervised', 'market') %}
+        <div class="plot-card">
+          <div class="plot-card-label">
+            {% if p.category == 'segmentation' %}
+            <i class="fas fa-users" style="color:var(--gold-500);"></i>
+            {% elif p.category == 'fraud' %}
+            <i class="fas fa-exclamation-triangle" style="color:var(--red-400);"></i>
+            {% elif p.category == 'risk' %}
+            <i class="fas fa-shield-alt" style="color:var(--gold-500);"></i>
+            {% elif p.category == 'supervised' %}
+            <i class="fas fa-brain" style="color:var(--teal-400);"></i>
+            {% else %}
+            <i class="fas fa-chart-line" style="color:var(--gold-500);"></i>
+            {% endif %}
+            {{ p.title }}
+          </div>
+          <img src="{{ p.path }}" alt="{{ p.title }}" loading="lazy" />
+        </div>
+        {% endif %}
+        {% endfor %}
+      </div>
+      {% endif %}
+
+      <!-- Segment Profiles -->
+      {% if kpis and kpis.segment_profiles %}
+      <div class="panel-section-title"><i class="fas fa-layer-group"></i> Segment Profiles</div>
+      <p style="font-size:0.85rem; color:var(--gray-500); margin-bottom: var(--sp-sm);">
+        Mean values of financial features per cluster — use these to characterize each customer segment.
+      </p>
+      <div class="segment-grid">
+        {% for profile in kpis.segment_profiles %}
+        <div class="segment-card">
+          <h5><i class="fas fa-circle" style="font-size:0.5rem;"></i> Segment {{ profile.segment }}</h5>
+          <p><span style="color:var(--gray-600);">Size:</span> {{ "{:,}".format(profile.size) }}</p>
+          {% if profile.anomaly_rate_pct is defined %}
+          <p><span style="color:var(--gray-600);">Anomaly Rate:</span> {{ profile.anomaly_rate_pct }}%</p>
+          {% endif %}
+          {% for key, val in profile.items() %}
+          {% if key not in ('segment', 'size', 'anomaly_rate_pct') %}
+          <p><span style="color:var(--gray-600);">{{ key | replace('_mean','') }}:</span>
+            {% if val is not none %}{{ "%.2f"|format(val) }}{% else %}—{% endif %}
+          </p>
+          {% endif %}
+          {% endfor %}
+        </div>
+        {% endfor %}
+      </div>
+      {% endif %}
+
+      {% else %}
+      <div class="info-msg">
+        <i class="fas fa-info-circle"></i>
+        ML analysis requires at least 1 numeric column. This dataset did not have sufficient numeric data for modeling.
+      </div>
+      {% endif %}
+    </div>
+
+    <!-- =================== TAB 3: FINANCIAL KPIs =================== -->
+    <div class="tab-panel" id="panel-kpis">
+
+      <div style="display:grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: var(--sp-md);">
+
+        <!-- Transaction Volume Card -->
+        <div class="glass-card">
+          <div class="insight-card-title"><i class="fas fa-coins"></i> Transaction Summary</div>
+          <table style="width:100%; font-size:0.88rem;">
+            <tr>
+              <td style="color:var(--gray-500); padding:8px 0; border-bottom:1px solid rgba(255,255,255,0.04);">Total
+                Records</td>
+              <td
+                style="text-align:right; color:var(--white); font-family:var(--font-mono); font-weight:600; border-bottom:1px solid rgba(255,255,255,0.04);">
+                {{ "{:,}".format(kpis.total_records) if kpis else '—' }}
+              </td>
+            </tr>
+            {% if kpis and kpis.total_volume is not none %}
+            <tr>
+              <td style="color:var(--gray-500); padding:8px 0; border-bottom:1px solid rgba(255,255,255,0.04);">Total
+                Volume</td>
+              <td
+                style="text-align:right; color:var(--gold-400); font-family:var(--font-mono); font-weight:700; border-bottom:1px solid rgba(255,255,255,0.04);">
+                {{ "{:,.2f}".format(kpis.total_volume) }}
+              </td>
+            </tr>
+            <tr>
+              <td style="color:var(--gray-500); padding:8px 0; border-bottom:1px solid rgba(255,255,255,0.04);">Average
+                Transaction</td>
+              <td
+                style="text-align:right; color:var(--teal-400); font-family:var(--font-mono); font-weight:600; border-bottom:1px solid rgba(255,255,255,0.04);">
+                {{ "{:,.2f}".format(kpis.avg_transaction) }}
+              </td>
+            </tr>
+            <tr>
+              <td style="color:var(--gray-500); padding:8px 0; border-bottom:1px solid rgba(255,255,255,0.04);">Median
+                Transaction</td>
+              <td
+                style="text-align:right; color:var(--gray-300); font-family:var(--font-mono); border-bottom:1px solid rgba(255,255,255,0.04);">
+                {{ "{:,.2f}".format(kpis.median_transaction) }}
+              </td>
+            </tr>
+            <tr>
+              <td style="color:var(--gray-500); padding:8px 0; border-bottom:1px solid rgba(255,255,255,0.04);">Std
+                Deviation</td>
+              <td
+                style="text-align:right; color:var(--gray-300); font-family:var(--font-mono); border-bottom:1px solid rgba(255,255,255,0.04);">
+                {{ "{:,.2f}".format(kpis.std_transaction) }}
+              </td>
+            </tr>
+            <tr>
+              <td style="color:var(--gray-500); padding:8px 0;">95th Percentile</td>
+              <td style="text-align:right; color:var(--gold-400); font-family:var(--font-mono); font-weight:600;">
+                {{ "{:,.2f}".format(kpis.p95_transaction) }}
+              </td>
+            </tr>
+            {% endif %}
+            <tr>
+              <td style="color:var(--gray-500); padding:8px 0; border-top:1px solid rgba(255,255,255,0.04);">Primary
+                Column</td>
+              <td style="text-align:right; color:var(--gray-300); font-family:var(--font-mono); font-size:0.8rem;">
+                {{ kpis.primary_col if kpis and kpis.primary_col else '—' }}
+              </td>
+            </tr>
+          </table>
+        </div>
+
+        <!-- Risk Assessment -->
+        <div class="glass-card">
+          <div class="insight-card-title"><i class="fas fa-shield-alt"></i> Risk Assessment</div>
+          <table style="width:100%; font-size:0.88rem;">
+            <tr>
+              <td style="color:var(--gray-500); padding:8px 0; border-bottom:1px solid rgba(255,255,255,0.04);">
+                Anomalies Flagged</td>
+              <td style="text-align:right; border-bottom:1px solid rgba(255,255,255,0.04);">
+                {% if kpis and kpis.fraud_count > 0 %}
+                <span class="fraud-badge">{{ kpis.fraud_count }}</span>
+                {% else %}
+                <span class="safe-badge">0 — Clean</span>
+                {% endif %}
+              </td>
+            </tr>
+            <tr>
+              <td style="color:var(--gray-500); padding:8px 0; border-bottom:1px solid rgba(255,255,255,0.04);">Anomaly
+                Rate</td>
+              <td style="text-align:right; color:
+                {% if kpis and kpis.fraud_rate_pct > 2 %}var(--red-400)
+                {% elif kpis and kpis.fraud_rate_pct > 0 %}var(--gold-400)
+                {% else %}var(--teal-400){% endif %};
+                font-family:var(--font-mono); font-weight:700; border-bottom:1px solid rgba(255,255,255,0.04);">
+                {{ kpis.fraud_rate_pct if kpis else 0 }}%
+              </td>
+            </tr>
+            <tr>
+              <td style="color:var(--gray-500); padding:8px 0; border-bottom:1px solid rgba(255,255,255,0.04);">Risk
+                Level</td>
+              <td style="text-align:right; border-bottom:1px solid rgba(255,255,255,0.04);">
+                {% if kpis and kpis.fraud_rate_pct > 5 %}
+                <span class="fraud-badge"><i class="fas fa-exclamation-triangle"></i> HIGH RISK</span>
+                {% elif kpis and kpis.fraud_rate_pct > 1 %}
+                <span style="color:var(--gold-400); font-weight:700; font-size:0.85rem;"><i
+                    class="fas fa-exclamation-circle"></i> MODERATE</span>
+                {% else %}
+                <span class="safe-badge"><i class="fas fa-check-circle"></i> LOW RISK</span>
+                {% endif %}
+              </td>
+            </tr>
+            {% if kpis and kpis.risk_tier_counts %}
+            {% for tier, count in kpis.risk_tier_counts.items() %}
+            <tr>
+              <td style="color:var(--gray-500); padding:6px 0; border-bottom:1px solid rgba(255,255,255,0.04);">{{ tier
+                }} Risk</td>
+              <td
+                style="text-align:right; color:var(--gray-300); font-family:var(--font-mono); border-bottom:1px solid rgba(255,255,255,0.04);">
+                {{ "{:,}".format(count) }}</td>
+            </tr>
+            {% endfor %}
+            {% endif %}
+            <tr>
+              <td style="color:var(--gray-500); padding:8px 0;">Detection Method</td>
+              <td style="text-align:right; color:var(--gray-400); font-size:0.8rem;">Isolation Forest</td>
+            </tr>
+          </table>
+        </div>
+
+        <!-- Data Profile -->
+        <div class="glass-card">
+          <div class="insight-card-title"><i class="fas fa-database"></i> Data Profile</div>
+          <table style="width:100%; font-size:0.88rem;">
+            <tr>
+              <td style="color:var(--gray-500); padding:8px 0; border-bottom:1px solid rgba(255,255,255,0.04);">Numeric
+                Features</td>
+              <td
+                style="text-align:right; color:var(--gold-400); font-family:var(--font-mono); border-bottom:1px solid rgba(255,255,255,0.04);">
+                {{ roles.numeric | length if roles else '—' }}</td>
+            </tr>
+            <tr>
+              <td style="color:var(--gray-500); padding:8px 0; border-bottom:1px solid rgba(255,255,255,0.04);">
+                Categorical Features</td>
+              <td
+                style="text-align:right; color:var(--gray-300); font-family:var(--font-mono); border-bottom:1px solid rgba(255,255,255,0.04);">
+                {{ roles.categorical | length if roles else '—' }}</td>
+            </tr>
+            <tr>
+              <td style="color:var(--gray-500); padding:8px 0; border-bottom:1px solid rgba(255,255,255,0.04);">Dataset
+                Type</td>
+              <td
+                style="text-align:right; color:var(--teal-400); font-weight:600; border-bottom:1px solid rgba(255,255,255,0.04);">
+                {{ dataset_type | replace('_',' ') | title }}</td>
+            </tr>
+            <tr>
+              <td style="color:var(--gray-500); padding:8px 0; border-bottom:1px solid rgba(255,255,255,0.04);">PCA
+                Variance</td>
+              <td
+                style="text-align:right; color:var(--gray-300); font-family:var(--font-mono); border-bottom:1px solid rgba(255,255,255,0.04);">
+                {{ kpis.pca_variance if kpis else '—' }}%</td>
+            </tr>
+            <tr>
+              <td style="color:var(--gray-500); padding:8px 0;">Segments Found</td>
+              <td style="text-align:right; color:var(--gold-400); font-family:var(--font-mono); font-weight:700;">{{
+                kpis.num_segments if kpis else 0 }}</td>
+            </tr>
+          </table>
+        </div>
+
+        <!-- Supervised Model -->
+        {% if kpis and kpis.supervised_auc %}
+        <div class="glass-card">
+          <div class="insight-card-title"><i class="fas fa-brain"></i> Supervised Fraud Model</div>
+          <table style="width:100%; font-size:0.88rem;">
+            <tr>
+              <td style="color:var(--gray-500); padding:8px 0; border-bottom:1px solid rgba(255,255,255,0.04);">ROC-AUC
+                Score</td>
+              <td
+                style="text-align:right; color:var(--teal-400); font-family:var(--font-mono); font-weight:700; border-bottom:1px solid rgba(255,255,255,0.04);">
+                {{ "%.4f"|format(kpis.supervised_auc) }}</td>
+            </tr>
+            {% if kpis.top_features %}
+            <tr>
+              <td colspan="2" style="color:var(--gray-500); padding:8px 0 4px 0;">Top Predictive Features:</td>
+            </tr>
+            {% for feat in kpis.top_features %}
+            <tr>
+              <td colspan="2" style="padding:3px 0; padding-left:12px;">
+                <i class="fas fa-angle-right" style="color:var(--gold-500); margin-right:6px;"></i>
+                <span style="color:var(--gray-200); font-family:var(--font-mono); font-size:0.82rem;">{{ feat }}</span>
+              </td>
+            </tr>
+            {% endfor %}
+            {% endif %}
+          </table>
+        </div>
+        {% endif %}
+
+        <!-- Market Metrics -->
+        {% if kpis and kpis.market_metrics %}
+        <div class="glass-card">
+          <div class="insight-card-title"><i class="fas fa-chart-candlestick"></i> Market Metrics</div>
+          <table style="width:100%; font-size:0.88rem;">
+            {% for key, val in kpis.market_metrics.items() %}
+            {% if val is not none %}
+            <tr>
+              <td style="color:var(--gray-500); padding:6px 0; border-bottom:1px solid rgba(255,255,255,0.04);">{{ key |
+                replace('_',' ') | title }}</td>
+              <td
+                style="text-align:right; color:var(--gray-200); font-family:var(--font-mono); border-bottom:1px solid rgba(255,255,255,0.04);">
+                {% if val is number %}{{ "%.4f"|format(val) }}{% else %}{{ val }}{% endif %}
+              </td>
+            </tr>
+            {% endif %}
+            {% endfor %}
+          </table>
+        </div>
+        {% endif %}
+
+      </div>
+    </div>
+
+    <!-- =================== TAB 4: AI INSIGHTS =================== -->
+    <div class="tab-panel" id="panel-insights">
+
+      {% if insights %}
+
+      <!-- Headline -->
+      {% if insights.headline %}
+      <div
+        style="background: linear-gradient(135deg, rgba(245,166,35,0.08) 0%, rgba(0,212,170,0.05) 100%); border: 1px solid rgba(245,166,35,0.2); border-radius: var(--radius-lg); padding: var(--sp-lg); margin-bottom: var(--sp-md);">
+        <div
+          style="font-size:0.75rem; font-weight:700; letter-spacing:0.1em; text-transform:uppercase; color:var(--gold-500); margin-bottom: 10px;">
+          <i class="fas fa-lightbulb"></i> &nbsp;Executive Summary
+        </div>
+        <p style="font-size:1.05rem; color:var(--gray-200); line-height:1.75;">{{ insights.headline }}</p>
+      </div>
+      {% endif %}
+
+      <div style="display:grid; grid-template-columns: 1fr 1fr; gap: var(--sp-md); margin-bottom: var(--sp-md);">
+
+        <!-- Fraud Insight -->
+        {% if insights.fraud_insight %}
+        <div class="insight-card" style="border-color: rgba(255,69,96,0.2);">
+          <div class="insight-card-title" style="color:var(--red-400);">
+            <i class="fas fa-exclamation-triangle"></i> Anomaly Analysis
+          </div>
+          <p class="insight-text">{{ insights.fraud_insight }}</p>
+          {% if kpis and kpis.fraud_count > 0 %}
+          <div
+            style="margin-top: var(--sp-sm); padding: 10px 14px; background: rgba(255,69,96,0.08); border: 1px solid rgba(255,69,96,0.2); border-radius: var(--radius-sm); font-size:0.82rem; color:var(--red-400);">
+            <i class="fas fa-flag"></i>
+            <strong>{{ kpis.fraud_count }} records</strong> flagged for manual review
+          </div>
+          {% endif %}
+        </div>
+        {% endif %}
+
+        <!-- Segment Insight -->
+        {% if insights.segment_insight %}
+        <div class="insight-card" style="border-color: rgba(0,212,170,0.2);">
+          <div class="insight-card-title" style="color:var(--teal-400);">
+            <i class="fas fa-sitemap"></i> Segmentation Analysis
+          </div>
+          <p class="insight-text">{{ insights.segment_insight }}</p>
+        </div>
+        {% endif %}
+
+        <!-- Risk Insight -->
+        {% if insights.risk_insight %}
+        <div class="insight-card">
+          <div class="insight-card-title"><i class="fas fa-shield-alt"></i> Risk Tier Analysis</div>
+          <p class="insight-text">{{ insights.risk_insight }}</p>
+        </div>
+        {% endif %}
+
+        <!-- Supervised Insight -->
+        {% if insights.supervised_insight %}
+        <div class="insight-card">
+          <div class="insight-card-title"><i class="fas fa-brain"></i> ML Model Performance</div>
+          <p class="insight-text">{{ insights.supervised_insight }}</p>
+        </div>
+        {% endif %}
+
+        <!-- Market Insight -->
+        {% if insights.market_insight %}
+        <div class="insight-card">
+          <div class="insight-card-title"><i class="fas fa-chart-line"></i> Market Analysis</div>
+          <p class="insight-text">{{ insights.market_insight }}</p>
+        </div>
+        {% endif %}
+
+        <!-- Data Context -->
+        {% if insights.dataset_context %}
+        <div class="insight-card">
+          <div class="insight-card-title"><i class="fas fa-database"></i> Dataset Context</div>
+          <p class="insight-text">{{ insights.dataset_context }}</p>
+        </div>
+        {% endif %}
+
+      </div>
+
+      <!-- Red Flags -->
+      {% if insights.red_flags %}
+      <div class="insight-card" style="border-color: rgba(255,69,96,0.3); margin-bottom: var(--sp-md);">
+        <div class="insight-card-title" style="color:var(--red-400);"><i class="fas fa-flag"></i> Red Flags</div>
+        <ul class="finding-list">
+          {% for flag in insights.red_flags %}
+          <li style="color:var(--red-400);">{{ flag }}</li>
+          {% endfor %}
+        </ul>
+      </div>
+      {% endif %}
+
+      <!-- Recommendations -->
+      {% if insights.recommendations %}
+      <div class="insight-card" style="margin-bottom: var(--sp-md);">
+        <div class="insight-card-title"><i class="fas fa-bullseye"></i> Business Recommendations</div>
+        <ol class="rec-list">
+          {% for rec in insights.recommendations %}
+          <li>{{ rec }}</li>
+          {% endfor %}
+        </ol>
+      </div>
+      {% endif %}
+
+      <!-- Opportunities -->
+      {% if insights.opportunities %}
+      <div class="insight-card" style="border-color:rgba(0,212,170,0.3); margin-bottom: var(--sp-md);">
+        <div class="insight-card-title" style="color:var(--teal-400);"><i class="fas fa-rocket"></i> Opportunities</div>
+        <ul class="finding-list">
+          {% for opp in insights.opportunities %}
+          <li style="color:var(--teal-400);">{{ opp }}</li>
+          {% endfor %}
+        </ul>
+      </div>
+      {% endif %}
+
+      <!-- Data Quality -->
+      {% if insights.data_quality %}
+      <div
+        style="padding:12px 16px; background:rgba(0,212,170,0.06); border:1px solid rgba(0,212,170,0.15); border-radius:var(--radius-md); font-size:0.82rem; color:var(--gray-400);">
+        <i class="fas fa-info-circle" style="color:var(--teal-500);"></i>
+        &nbsp;<strong style="color:var(--gray-300);">Data Quality:</strong> {{ insights.data_quality }}
+      </div>
+      {% endif %}
+
+      {% else %}
+      <div class="info-msg"><i class="fas fa-info-circle"></i> No insights were generated for this dataset.</div>
+      {% endif %}
+    </div>
+
+    <!-- Action Row -->
+    <div class="action-row">
       <a href="{{ url_for('upload_file') }}" class="btn btn-primary btn-lg">
-        <i class="fas fa-upload"></i> Upload Another File
+        <i class="fas fa-upload"></i> Analyze New Dataset
       </a>
       <a href="{{ url_for('index') }}" class="btn btn-outline btn-lg">
         <i class="fas fa-home"></i> Back to Home
       </a>
     </div>
-  </div>
+
+  </div><!-- /container -->
 
   <!-- Footer -->
-  <footer>
-    <small>
-      <i class="fas fa-lightbulb"></i> <strong>Tip:</strong> All visualizations are automatically generated based on
-      your data structure<br>
-      Charts are saved in <code>static/plots/</code> for your reference
-    </small>
+  <footer
+    style="background: var(--navy-950); border-top: 1px solid rgba(255,255,255,0.05); padding: var(--sp-md) 0; text-align:center; color: var(--gray-600); font-size:0.8rem; margin-top: var(--sp-2xl);">
+    <p>FinSight Analytics &bull; Financial ML Analysis Platform &bull; Python · Flask · Scikit-Learn · Pandas</p>
   </footer>
+
+  <script>
+    // Tab switching
+    function showTab(tabName, btn) {
+      document.querySelectorAll('.tab-panel').forEach(p => p.classList.remove('active'));
+      document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+      document.getElementById('panel-' + tabName).classList.add('active');
+      btn.classList.add('active');
+    }
+
+    // Smooth number count-up for KPI values
+    document.addEventListener('DOMContentLoaded', () => {
+      document.querySelectorAll('.kpi-value').forEach(el => {
+        const text = el.textContent.trim();
+        const num = parseFloat(text.replace(/[^0-9.]/g, ''));
+        if (!isNaN(num) && num > 0 && text.length < 12) {
+          let start = 0;
+          const dur = 900;
+          const inc = num / 60;
+          const suffix = text.replace(/[0-9.,]/g, '').trim();
+          const timer = setInterval(() => {
+            start += inc;
+            if (start >= num) { start = num; clearInterval(timer); }
+            if (text.includes('.') || text.includes('%')) {
+              el.textContent = start.toFixed(2) + suffix;
+            } else {
+              el.textContent = Math.floor(start).toLocaleString() + suffix;
+            }
+          }, 16);
+        }
+      });
+    });
+  </script>
 </body>
 
 </html>

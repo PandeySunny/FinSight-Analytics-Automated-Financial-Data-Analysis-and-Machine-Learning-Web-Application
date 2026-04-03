@@ -4,111 +4,214 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Upload Data | DataInsight Analytics</title>
-  <meta name="description" content="Upload your CSV file for automated analysis">
+  <title>Upload Dataset | FinSight Analytics</title>
+  <meta name="description"
+    content="Upload your financial CSV dataset — transactions, balances, customer records — for automated EDA and ML analysis.">
   <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
 </head>
 
 <body>
+
   <!-- Navigation -->
   <nav class="navbar">
     <div class="container">
       <a href="{{ url_for('index') }}" class="nav-brand">
         <i class="fas fa-chart-line"></i>
-        <span>DataInsight Analytics</span>
+        Fin<span class="brand-accent">Sight</span>
       </a>
       <div class="nav-links">
         <a href="{{ url_for('index') }}#features">Features</a>
-        <a href="{{ url_for('index') }}#how-it-works">How It Works</a>
-        <a href="{{ url_for('upload_file') }}" class="nav-cta">Try Now</a>
+        <a href="{{ url_for('index') }}#pipeline">Pipeline</a>
+        <a href="{{ url_for('upload_file') }}" class="nav-cta">
+          <i class="fas fa-upload"></i> New Analysis
+        </a>
       </div>
     </div>
   </nav>
 
-  <div class="container">
-    <!-- Page Header -->
-    <div style="text-align: center; margin: 2rem 0;">
-      <h1><i class="fas fa-upload"></i> Upload Your Data</h1>
-      <p style="color: var(--gray-600); font-size: 1.125rem;">
-        Select a CSV file to begin automated analysis
-      </p>
-    </div>
+  <div class="upload-page-wrap">
+    <div class="container" style="max-width:760px;">
 
-    <!-- Flash Messages -->
-    {% with messages = get_flashed_messages() %}
-    {% if messages %}
-    <div class="flash">
-      {% for m in messages %}<p>{{ m }}</p>{% endfor %}
-    </div>
-    {% endif %}
-    {% endwith %}
-
-    {% if message %}
-    <div class="info">{{ message }}</div>
-    {% endif %}
-
-    <!-- Main Upload Card -->
-    <div class="glass-card">
-      <form method="post" enctype="multipart/form-data">
-
-        <!-- Upload Zone -->
-        <div class="upload-zone">
-          <div class="upload-icon"><i class="fas fa-cloud-upload-alt"></i></div>
-          <div class="upload-text">Select your CSV file</div>
-          <div class="upload-hint">Drag and drop or click to browse • Max 500 MB</div>
+      <!-- Page Header -->
+      <div class="upload-page-header">
+        <div class="hero-badge" style="margin: 0 auto var(--sp-sm);">
+          <i class="fas fa-database"></i> Financial Data Ingestion
         </div>
+        <h1>Upload Your Dataset</h1>
+        <p>Bank transactions, customer records, portfolio data, or any financial CSV</p>
+      </div>
 
-        <!-- File Input -->
-        <label class="file-label">
-          <input type="file" name="file" accept=".csv" required />
-        </label>
+      <!-- Flash Messages -->
+      {% with messages = get_flashed_messages() %}
+      {% if messages %}
+      <div class="flash-msg">
+        {% for m in messages %}<p style="margin:2px 0">{{ m }}</p>{% endfor %}
+      </div>
+      {% endif %}
+      {% endwith %}
 
-        {% if uploaded_filename %}
-        <div class="previous-file">
-          <p><i class="fas fa-check-circle"></i> <strong>Previous upload:</strong> {{ uploaded_filename.split('/')[-1]
-            }}</p>
-          <small>Select a new file above to analyze different data</small>
-        </div>
-        {% endif %}
+      {% if message %}
+      <div class="info-msg"><i class="fas fa-check-circle"></i> {{ message }}</div>
+      {% endif %}
 
-        <!-- Action Button -->
-        <div class="buttons">
-          <button type="submit" name="action" value="upload" class="btn btn-primary btn-lg">
-            <i class="fas fa-rocket"></i> Upload & Analyze
-          </button>
-        </div>
-      </form>
-    </div>
-
-    <!-- Info Section -->
-    <div style="margin-top: 3rem; text-align: center; color: var(--gray-600);">
-      <h3 style="margin-bottom: 1rem; color: var(--gray-900);">
-        <i class="fas fa-info-circle"></i> Supported Features
-      </h3>
-      <div class="features-grid" style="max-width: 800px; margin: 0 auto;">
-        <div style="padding: 1rem;">
-          <i class="fas fa-file-csv" style="font-size: 2rem; color: var(--primary-blue); margin-bottom: 0.5rem;"></i>
-          <p><strong>CSV Format</strong></p>
-          <small>Any CSV file structure</small>
-        </div>
-        <div style="padding: 1rem;">
-          <i class="fas fa-database" style="font-size: 2rem; color: var(--primary-blue); margin-bottom: 0.5rem;"></i>
-          <p><strong>Large Files</strong></p>
-          <small>Up to 500MB supported</small>
-        </div>
-        <div style="padding: 1rem;">
-          <i class="fas fa-chart-bar" style="font-size: 2rem; color: var(--primary-blue); margin-bottom: 0.5rem;"></i>
-          <p><strong>Auto Visualization</strong></p>
-          <small>10+ chart types generated</small>
+      <!-- Analysis Pipeline Preview -->
+      <div class="glass-card" style="margin-bottom: var(--sp-md);">
+        <p
+          style="font-size:0.78rem; font-weight:700; letter-spacing:0.1em; text-transform:uppercase; color:var(--gray-600); margin-bottom: var(--sp-sm);">
+          <i class="fas fa-route" style="color:var(--gold-500);"></i> &nbsp;Analysis Pipeline
+        </p>
+        <div class="pipeline-preview">
+          <div class="pp-step active">
+            <div class="pp-dot"><i class="fas fa-upload"></i></div>
+            <span class="pp-label">Upload</span>
+          </div>
+          <div class="pp-step">
+            <div class="pp-dot"><i class="fas fa-broom"></i></div>
+            <span class="pp-label">Clean</span>
+          </div>
+          <div class="pp-step">
+            <div class="pp-dot"><i class="fas fa-chart-bar"></i></div>
+            <span class="pp-label">EDA</span>
+          </div>
+          <div class="pp-step">
+            <div class="pp-dot"><i class="fas fa-robot"></i></div>
+            <span class="pp-label">ML Models</span>
+          </div>
+          <div class="pp-step">
+            <div class="pp-dot"><i class="fas fa-lightbulb"></i></div>
+            <span class="pp-label">Insights</span>
+          </div>
         </div>
       </div>
+
+      <!-- Upload Card -->
+      <div class="glass-card">
+        <form id="upload-form" method="post" enctype="multipart/form-data">
+
+          <!-- Drop Zone -->
+          <div class="upload-zone" id="drop-zone">
+            <i class="fas fa-cloud-upload-alt upload-icon"></i>
+            <div class="upload-text">Drag &amp; drop your CSV file here</div>
+            <div class="upload-hint">or click the button below to browse files &bull; Max 500 MB</div>
+            <div class="file-badges" style="margin-top: var(--sp-md);">
+              <span class="file-badge"><i class="fas fa-file-csv"></i> .CSV</span>
+              <span class="file-badge"><i class="fas fa-coins"></i> Transactions</span>
+              <span class="file-badge"><i class="fas fa-users"></i> Customer Records</span>
+              <span class="file-badge"><i class="fas fa-chart-line"></i> Portfolio Data</span>
+            </div>
+          </div>
+
+          <!-- File Input -->
+          <label class="file-label" style="margin-top: var(--sp-md);">
+            <input type="file" id="file-input" name="file" accept=".csv,.xlsx,.xls" required />
+          </label>
+
+          <!-- File name display -->
+          <div id="file-name-display"
+            style="display:none; margin-top: var(--sp-sm); padding: 10px 14px; background: rgba(0,212,170,0.08); border: 1px solid rgba(0,212,170,0.25); border-radius: var(--radius-md); font-size:0.88rem; color: var(--teal-400);">
+            <i class="fas fa-check-circle"></i> <span id="file-name-text"></span>
+          </div>
+
+          {% if uploaded_filename %}
+          <div class="previous-file">
+            <i class="fas fa-history" style="color:var(--gold-500);"></i>
+            <strong>Previous upload:</strong> {{ uploaded_filename.split('/')[-1] }}
+            &nbsp;<small style="color:var(--gray-600);">— Select a new file to replace</small>
+          </div>
+          {% endif %}
+
+          <!-- Submit -->
+          <div class="buttons">
+            <button id="submit-btn" type="submit" name="action" value="upload" class="btn btn-primary btn-lg">
+              <i class="fas fa-rocket"></i> Upload &amp; Analyze
+            </button>
+            {% if uploaded_filename %}
+            <a href="{{ url_for('results') }}" class="btn btn-outline btn-lg">
+              <i class="fas fa-chart-pie"></i> View Last Results
+            </a>
+            {% endif %}
+          </div>
+        </form>
+      </div>
+
+      <!-- Supported Column Types hint -->
+      <div class="glass-card" style="margin-top: var(--sp-md);">
+        <p
+          style="font-size:0.78rem; font-weight:700; letter-spacing:0.1em; text-transform:uppercase; color:var(--gray-600); margin-bottom: var(--sp-sm);">
+          <i class="fas fa-info-circle" style="color:var(--gold-500);"></i> &nbsp;For Best ML Results Include
+        </p>
+        <div style="display:grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap: 10px;">
+          <div style="display:flex; align-items:center; gap:8px; font-size:0.85rem; color:var(--gray-400);">
+            <i class="fas fa-dollar-sign" style="color:var(--gold-500); width:16px;"></i>
+            Amount / Balance columns
+          </div>
+          <div style="display:flex; align-items:center; gap:8px; font-size:0.85rem; color:var(--gray-400);">
+            <i class="fas fa-calendar" style="color:var(--gold-500); width:16px;"></i>
+            Date / Timestamp field
+          </div>
+          <div style="display:flex; align-items:center; gap:8px; font-size:0.85rem; color:var(--gray-400);">
+            <i class="fas fa-tags" style="color:var(--gold-500); width:16px;"></i>
+            Transaction category
+          </div>
+          <div style="display:flex; align-items:center; gap:8px; font-size:0.85rem; color:var(--gray-400);">
+            <i class="fas fa-id-card" style="color:var(--gold-500); width:16px;"></i>
+            Customer / Account ID
+          </div>
+          <div style="display:flex; align-items:center; gap:8px; font-size:0.85rem; color:var(--gray-400);">
+            <i class="fas fa-map-marker-alt" style="color:var(--gold-500); width:16px;"></i>
+            Region / Country
+          </div>
+          <div style="display:flex; align-items:center; gap:8px; font-size:0.85rem; color:var(--gray-400);">
+            <i class="fas fa-percent" style="color:var(--gold-500); width:16px;"></i>
+            Income / Revenue / Cost
+          </div>
+        </div>
+      </div>
+
     </div>
   </div>
 
   <!-- Footer -->
-  <footer>
+  <footer
+    style="background: var(--navy-950); border-top: 1px solid rgba(255,255,255,0.05); padding: var(--sp-md) 0; text-align:center; color: var(--gray-600); font-size:0.8rem;">
+    <p>FinSight Analytics &bull; Personal Financial ML Project &bull; Python · Flask · Scikit-Learn</p>
   </footer>
+
+  <script>
+    // Drag and drop visual
+    const dropZone = document.getElementById('drop-zone');
+    const fileInput = document.getElementById('file-input');
+    const fileNameDisplay = document.getElementById('file-name-display');
+    const fileNameText = document.getElementById('file-name-text');
+    const submitBtn = document.getElementById('submit-btn');
+
+    ['dragenter', 'dragover'].forEach(e => {
+      dropZone.addEventListener(e, ev => { ev.preventDefault(); dropZone.classList.add('drag-over'); });
+    });
+    ['dragleave', 'drop'].forEach(e => {
+      dropZone.addEventListener(e, ev => { ev.preventDefault(); dropZone.classList.remove('drag-over'); });
+    });
+    dropZone.addEventListener('drop', ev => {
+      const files = ev.dataTransfer.files;
+      if (files.length) { fileInput.files = files; showFileName(files[0].name); }
+    });
+    dropZone.addEventListener('click', () => fileInput.click());
+    fileInput.addEventListener('change', () => {
+      if (fileInput.files.length) showFileName(fileInput.files[0].name);
+    });
+
+    function showFileName(name) {
+      fileNameText.textContent = name + ' — ready to analyze';
+      fileNameDisplay.style.display = 'block';
+    }
+
+    // Button loading state on submit
+    document.getElementById('upload-form').addEventListener('submit', () => {
+      submitBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Processing...';
+      submitBtn.disabled = true;
+    });
+  </script>
 </body>
 
 </html>

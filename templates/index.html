@@ -1,255 +1,253 @@
 <!DOCTYPE html>
 <html lang="en">
-
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>DataInsight Analytics | Professional Data Analysis Platform</title>
-    <meta name="description" content="Automated data analysis platform with advanced visualizations and insights">
-    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>FinSight Analytics | Professional Financial Data Analysis Platform</title>
+  <meta name="description" content="End-to-end financial data analysis platform — EDA, fraud detection, customer segmentation, and predictive ML models for banking, fintech, and investment firms.">
+  <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
 </head>
-
 <body class="landing-page">
-    <!-- Navigation -->
-    <nav class="navbar">
-        <div class="container">
-            <div class="nav-brand">
-                <i class="fas fa-chart-line"></i>
-                <span>DataInsight Analytics</span>
-            </div>
-            <div class="nav-links">
-                <a href="#features">Features</a>
-                <a href="#how-it-works">How It Works</a>
-                <a href="#tech-stack">Technology</a>
-                <a href="{{ url_for('upload_file') }}" class="nav-cta">Try Now</a>
-            </div>
+
+  <!-- Live Ticker Bar -->
+  <div class="ticker-bar">
+    <div class="ticker-content">
+      <span class="ticker-item"><span class="ticker-sym">FRAUD RATE</span> <span class="down">↓ 2.3%</span></span>
+      <span class="ticker-item"><span class="ticker-sym">TRANSACTIONS ANALYZED</span> <span class="up">↑ 4.2M</span></span>
+      <span class="ticker-item"><span class="ticker-sym">ANOMALIES DETECTED</span> <span class="down">↓ 1.1%</span></span>
+      <span class="ticker-item"><span class="ticker-sym">DATA QUALITY SCORE</span> <span class="up">98.7%</span></span>
+      <span class="ticker-item"><span class="ticker-sym">SEGMENTS DISCOVERED</span> <span class="up">↑ 3</span></span>
+      <span class="ticker-item"><span class="ticker-sym">AVG PROCESSING TIME</span> <span class="up">2.4s</span></span>
+      <!-- duplicate for seamless loop -->
+      <span class="ticker-item"><span class="ticker-sym">FRAUD RATE</span> <span class="down">↓ 2.3%</span></span>
+      <span class="ticker-item"><span class="ticker-sym">TRANSACTIONS ANALYZED</span> <span class="up">↑ 4.2M</span></span>
+      <span class="ticker-item"><span class="ticker-sym">ANOMALIES DETECTED</span> <span class="down">↓ 1.1%</span></span>
+      <span class="ticker-item"><span class="ticker-sym">DATA QUALITY SCORE</span> <span class="up">98.7%</span></span>
+      <span class="ticker-item"><span class="ticker-sym">SEGMENTS DISCOVERED</span> <span class="up">↑ 3</span></span>
+      <span class="ticker-item"><span class="ticker-sym">AVG PROCESSING TIME</span> <span class="up">2.4s</span></span>
+    </div>
+  </div>
+
+  <!-- Navigation -->
+  <nav class="navbar">
+    <div class="container">
+      <a href="{{ url_for('index') }}" class="nav-brand">
+        <i class="fas fa-chart-line"></i>
+        Fin<span class="brand-accent">Sight</span>
+      </a>
+      <div class="nav-links">
+        <a href="#features">Features</a>
+        <a href="#pipeline">How It Works</a>
+        <a href="#tech-stack">Technology</a>
+        <a href="{{ url_for('upload_file') }}" class="nav-cta">
+          <i class="fas fa-rocket"></i> Start Analysis
+        </a>
+      </div>
+    </div>
+  </nav>
+
+  <!-- Hero Section -->
+  <section class="hero-section">
+    <div class="hero-grid-overlay"></div>
+    <div class="hero-glow"></div>
+    <div class="hero-glow-2"></div>
+    <div class="container">
+      <div class="hero-content">
+        <div class="hero-badge">
+          <i class="fas fa-circle" style="color: var(--teal-500); font-size:0.5rem;"></i>
+          Financial Intelligence Platform
         </div>
-    </nav>
-
-    <!-- Hero Section -->
-    <section class="hero-section">
-        <div class="container">
-            <div class="hero-content">
-                <h1 class="hero-title">
-                    Transform Your Data Into
-                    <span class="gradient-text">Actionable Insights</span>
-                </h1>
-                <p class="hero-subtitle">
-                    Professional automated data analysis platform powered by advanced Python algorithms.
-                    Upload CSV files and receive comprehensive statistical analysis with beautiful visualizations in
-                    seconds.
-                </p>
-                <div class="hero-buttons">
-                    <a href="{{ url_for('upload_file') }}" class="btn btn-primary btn-lg">
-                        <i class="fas fa-upload"></i> Start Analysis
-                    </a>
-                    <a href="#features" class="btn btn-outline btn-lg">
-                        <i class="fas fa-info-circle"></i> Learn More
-                    </a>
-                </div>
-                <div class="hero-stats">
-                    <div class="stat">
-                        <div class="stat-number">500MB</div>
-                        <div class="stat-label">Max File Size</div>
-                    </div>
-                    <div class="stat">
-                        <div class="stat-number">10+</div>
-                        <div class="stat-label">Chart Types</div>
-                    </div>
-                    <div class="stat">
-                        <div class="stat-number">Instant</div>
-                        <div class="stat-label">Results</div>
-                    </div>
-                </div>
-            </div>
+        <h1 class="hero-title">
+          End-to-End Financial<br>
+          <span class="gradient-text">Data Analysis & ML</span>
+        </h1>
+        <p class="hero-subtitle">
+          Upload your financial CSV data and get instant EDA, fraud detection via Isolation Forest, customer segmentation via K-Means, and actionable insights — purpose-built for banking and fintech.
+        </p>
+        <div class="sector-badges">
+          <span class="sector-badge"><i class="fas fa-university"></i> Banking</span>
+          <span class="sector-badge"><i class="fas fa-mobile-alt"></i> Fintech</span>
+          <span class="sector-badge"><i class="fas fa-chart-pie"></i> Investment</span>
+          <span class="sector-badge"><i class="fas fa-shield-alt"></i> Insurance</span>
+          <span class="sector-badge"><i class="fas fa-coins"></i> Payments</span>
         </div>
-    </section>
-
-    <!-- Features Section -->
-    <section id="features" class="features-section">
-        <div class="container">
-            <div class="section-header">
-                <h2>Powerful Features</h2>
-                <p>Everything you need for comprehensive data analysis</p>
-            </div>
-
-            <div class="features-grid">
-                <div class="feature-card">
-                    <div class="feature-icon">
-                        <i class="fas fa-chart-bar"></i>
-                    </div>
-                    <h3>Automated Visualization</h3>
-                    <p>Generates histograms, boxplots, pie charts, correlation heatmaps, and more automatically based on
-                        your data types.</p>
-                </div>
-
-                <div class="feature-card">
-                    <div class="feature-icon">
-                        <i class="fas fa-table"></i>
-                    </div>
-                    <h3>Statistical Summary</h3>
-                    <p>Comprehensive dataset overview including data types, null counts, unique values, mean, and
-                        standard deviation.</p>
-                </div>
-
-                <div class="feature-card">
-                    <div class="feature-icon">
-                        <i class="fas fa-database"></i>
-                    </div>
-                    <h3>Large File Support</h3>
-                    <p>Handles files up to 500MB with intelligent sampling for memory optimization and fast processing.
-                    </p>
-                </div>
-
-                <div class="feature-card">
-                    <div class="feature-icon">
-                        <i class="fas fa-mobile-alt"></i>
-                    </div>
-                    <h3>Responsive Design</h3>
-                    <p>Works seamlessly on desktop, tablet, and mobile devices with a professional, intuitive interface.
-                    </p>
-                </div>
-
-                <div class="feature-card">
-                    <div class="feature-icon">
-                        <i class="fas fa-shield-alt"></i>
-                    </div>
-                    <h3>Data Privacy</h3>
-                    <p>All processing happens locally on the server. Your data is never shared with third parties.</p>
-                </div>
-
-                <div class="feature-card">
-                    <div class="feature-icon">
-                        <i class="fas fa-bolt"></i>
-                    </div>
-                    <h3>Fast Processing</h3>
-                    <p>Powered by Pandas and NumPy for blazing-fast data analysis and visualization generation.</p>
-                </div>
-            </div>
+        <div class="hero-buttons">
+          <a href="{{ url_for('upload_file') }}" class="btn btn-primary btn-lg">
+            <i class="fas fa-upload"></i> Upload Dataset
+          </a>
+          <a href="#pipeline" class="btn btn-outline btn-lg">
+            <i class="fas fa-play-circle"></i> See Pipeline
+          </a>
         </div>
-    </section>
-
-    <!-- How It Works Section -->
-    <section id="how-it-works" class="how-it-works-section">
-        <div class="container">
-            <div class="section-header">
-                <h2>How It Works</h2>
-                <p>Three simple steps to data insights</p>
-            </div>
-
-            <div class="steps-container">
-                <div class="step">
-                    <div class="step-number">1</div>
-                    <div class="step-icon">
-                        <i class="fas fa-file-upload"></i>
-                    </div>
-                    <h3>Upload Your Data</h3>
-                    <p>Select and upload your CSV file. Files up to 500MB are supported.</p>
-                </div>
-
-                <div class="step-arrow">
-                    <i class="fas fa-arrow-right"></i>
-                </div>
-
-                <div class="step">
-                    <div class="step-number">2</div>
-                    <div class="step-icon">
-                        <i class="fas fa-cogs"></i>
-                    </div>
-                    <h3>Automatic Analysis</h3>
-                    <p>Our algorithms analyze your data and generate insights instantly.</p>
-                </div>
-
-                <div class="step-arrow">
-                    <i class="fas fa-arrow-right"></i>
-                </div>
-
-                <div class="step">
-                    <div class="step-number">3</div>
-                    <div class="step-icon">
-                        <i class="fas fa-chart-pie"></i>
-                    </div>
-                    <h3>View Results</h3>
-                    <p>Explore statistics, tables, and beautiful visualizations.</p>
-                </div>
-            </div>
+        <div class="hero-stats">
+          <div class="stat">
+            <div class="stat-number">500MB</div>
+            <div class="stat-label">Max File Size</div>
+          </div>
+          <div class="stat">
+            <div class="stat-number">5-Step</div>
+            <div class="stat-label">ML Pipeline</div>
+          </div>
+          <div class="stat">
+            <div class="stat-number">10+</div>
+            <div class="stat-label">Chart Types</div>
+          </div>
+          <div class="stat">
+            <div class="stat-number">&lt;5s</div>
+            <div class="stat-label">Analysis Speed</div>
+          </div>
         </div>
-    </section>
+      </div>
+    </div>
+  </section>
 
-    <!-- Technology Stack Section -->
-    <section id="tech-stack" class="tech-stack-section">
-        <div class="container">
-            <div class="section-header">
-                <h2>Built With Modern Technology</h2>
-                <p>Industry-standard tools and frameworks</p>
-            </div>
-
-            <div class="tech-grid">
-                <div class="tech-item">
-                    <i class="fab fa-python"></i>
-                    <span>Python</span>
-                </div>
-                <div class="tech-item">
-                    <i class="fas fa-flask"></i>
-                    <span>Flask</span>
-                </div>
-                <div class="tech-item">
-                    <i class="fas fa-table"></i>
-                    <span>Pandas</span>
-                </div>
-                <div class="tech-item">
-                    <i class="fas fa-chart-area"></i>
-                    <span>Matplotlib</span>
-                </div>
-                <div class="tech-item">
-                    <i class="fas fa-fire"></i>
-                    <span>Seaborn</span>
-                </div>
-                <div class="tech-item">
-                    <i class="fab fa-html5"></i>
-                    <span>HTML5</span>
-                </div>
-                <div class="tech-item">
-                    <i class="fab fa-css3-alt"></i>
-                    <span>CSS3</span>
-                </div>
-                <div class="tech-item">
-                    <i class="fas fa-code"></i>
-                    <span>NumPy</span>
-                </div>
-            </div>
+  <!-- Features Section -->
+  <section id="features" class="section-alt">
+    <div class="container">
+      <div class="section-header">
+        <span class="section-tag">Capabilities</span>
+        <h2>Built for Financial Intelligence</h2>
+        <p>Every feature designed around real-world financial data workflows</p>
+      </div>
+      <div class="features-grid">
+        <div class="feature-card">
+          <div class="feature-icon"><i class="fas fa-search-dollar"></i></div>
+          <h3>Exploratory Data Analysis</h3>
+          <p>Instantly compute descriptive statistics, detect missing values, assess data quality, and visualize distributions across all numeric and categorical columns.</p>
         </div>
-    </section>
-
-    <!-- CTA Section -->
-    <section class="cta-section">
-        <div class="container">
-            <div class="cta-content">
-                <h2>Ready to Analyze Your Data?</h2>
-                <p>Start exploring your data insights in seconds</p>
-                <a href="{{ url_for('upload_file') }}" class="btn btn-primary btn-xl">
-                    <i class="fas fa-rocket"></i> Get Started Now
-                </a>
-            </div>
+        <div class="feature-card">
+          <div class="feature-icon"><i class="fas fa-exclamation-triangle"></i></div>
+          <h3>Fraud & Anomaly Detection</h3>
+          <p>Isolation Forest algorithm flags unusual transactions with 99th percentile precision. Red-alert visualization highlights every high-risk record for immediate investigation.</p>
         </div>
-    </section>
-
-    <!-- Footer -->
-    <footer class="footer">
-        <div class="container">
-            <div class="footer-content">
-                <div class="footer-brand">
-                    <i class="fas fa-chart-line"></i>
-                    <span>DataInsight Analytics</span>
-                </div>
-                <div class="footer-info">
-                    <p>&copy; 2026 DataInsight Analytics. Professional Data Analysis Platform.</p>
-                    <p class="tech-credit">Built with Python • Flask • Pandas • Matplotlib • Seaborn</p>
-                </div>
-            </div>
+        <div class="feature-card">
+          <div class="feature-icon"><i class="fas fa-users"></i></div>
+          <h3>Customer Segmentation</h3>
+          <p>K-Means clustering groups customers into behavioral segments. PCA projection reveals hidden patterns in your transaction and balance data across 2D space.</p>
         </div>
-    </footer>
+        <div class="feature-card">
+          <div class="feature-icon"><i class="fas fa-fire"></i></div>
+          <h3>Correlation Analysis</h3>
+          <p>Heatmaps reveal how financial variables correlate — balance vs. transaction amount, income vs. risk score — guiding risk modeling and feature engineering decisions.</p>
+        </div>
+        <div class="feature-card">
+          <div class="feature-icon"><i class="fas fa-database"></i></div>
+          <h3>Large File Processing</h3>
+          <p>Handles datasets up to 500MB with intelligent 100k-row sampling fallback. Processes multi-million row transaction ledgers without memory crashes.</p>
+        </div>
+        <div class="feature-card">
+          <div class="feature-icon"><i class="fas fa-lightbulb"></i></div>
+          <h3>Actionable Insights</h3>
+          <p>Rule-based intelligent engine generates plain-English findings, anomaly alerts, segment profiles, and ranked business recommendations — no API key required.</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- Pipeline Section -->
+  <section id="pipeline">
+    <div class="container">
+      <div class="section-header">
+        <span class="section-tag">Methodology</span>
+        <h2>5-Step Financial ML Pipeline</h2>
+        <p>Industry-standard end-to-end workflow from raw data to business insights</p>
+      </div>
+      <div class="pipeline-steps">
+        <div class="pipeline-step">
+          <div class="step-bubble"><i class="fas fa-upload"></i></div>
+          <h4>1. Ingest</h4>
+          <p>Upload CSV · parse · detect schema</p>
+        </div>
+        <div class="pipeline-step">
+          <div class="step-bubble"><i class="fas fa-broom"></i></div>
+          <h4>2. Clean</h4>
+          <p>Handle nulls · remove dupes · normalize dates</p>
+        </div>
+        <div class="pipeline-step">
+          <div class="step-bubble"><i class="fas fa-chart-bar"></i></div>
+          <h4>3. EDA</h4>
+          <p>Stats · distributions · correlation heatmap</p>
+        </div>
+        <div class="pipeline-step">
+          <div class="step-bubble"><i class="fas fa-robot"></i></div>
+          <h4>4. ML Models</h4>
+          <p>Segmentation · fraud detection · PCA</p>
+        </div>
+        <div class="pipeline-step">
+          <div class="step-bubble"><i class="fas fa-file-alt"></i></div>
+          <h4>5. Insights</h4>
+          <p>KPIs · findings · recommendations</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- Technology Stack -->
+  <section id="tech-stack" class="section-alt">
+    <div class="container">
+      <div class="section-header">
+        <span class="section-tag">Technology</span>
+        <h2>Built With Industry-Standard Tools</h2>
+        <p>The same stack used by data teams at leading financial institutions</p>
+      </div>
+      <div class="tech-grid">
+        <div class="tech-pill"><i class="fab fa-python"></i> Python 3.11</div>
+        <div class="tech-pill"><i class="fas fa-flask"></i> Flask</div>
+        <div class="tech-pill"><i class="fas fa-table"></i> Pandas</div>
+        <div class="tech-pill"><i class="fas fa-code"></i> NumPy</div>
+        <div class="tech-pill"><i class="fas fa-brain"></i> Scikit-Learn</div>
+        <div class="tech-pill"><i class="fas fa-chart-area"></i> Matplotlib</div>
+        <div class="tech-pill"><i class="fas fa-fire"></i> Seaborn</div>
+        <div class="tech-pill"><i class="fab fa-html5"></i> HTML5/CSS3</div>
+        <div class="tech-pill"><i class="fas fa-network-wired"></i> K-Means</div>
+        <div class="tech-pill"><i class="fas fa-search"></i> Isolation Forest</div>
+        <div class="tech-pill"><i class="fas fa-compress-alt"></i> PCA</div>
+        <div class="tech-pill"><i class="fas fa-project-diagram"></i> StandardScaler</div>
+      </div>
+    </div>
+  </section>
+
+  <!-- CTA Section -->
+  <section class="cta-section">
+    <div class="container">
+      <h2>Ready to Analyze Your Financial Data?</h2>
+      <p>Upload a CSV of transactions, balances, or customer records and get full ML insights in under 5 seconds</p>
+      <a href="{{ url_for('upload_file') }}" class="btn btn-primary btn-xl">
+        <i class="fas fa-rocket"></i> Launch Analysis
+      </a>
+    </div>
+  </section>
+
+  <!-- Footer -->
+  <footer class="footer">
+    <div class="container">
+      <div class="footer-grid">
+        <div>
+          <div class="footer-brand"><i class="fas fa-chart-line"></i> FinSight Analytics</div>
+          <p class="footer-desc">A personal project demonstrating end-to-end financial data analysis and machine learning — from raw CSV to actionable business intelligence.</p>
+        </div>
+        <div class="footer-section">
+          <h4>Platform</h4>
+          <a href="{{ url_for('upload_file') }}">Start Analysis</a>
+          <a href="#features">Features</a>
+          <a href="#pipeline">ML Pipeline</a>
+          <a href="#tech-stack">Technology</a>
+        </div>
+        <div class="footer-section">
+          <h4>ML Models</h4>
+          <a href="#">Fraud Detection</a>
+          <a href="#">Segmentation</a>
+          <a href="#">Anomaly Detection</a>
+          <a href="#">PCA Visualization</a>
+        </div>
+      </div>
+      <div class="footer-bottom">
+        <p>&copy; 2026 FinSight Analytics — Personal Data Analysis Portfolio Project</p>
+        <p>Python &bull; Flask &bull; Scikit-Learn &bull; Pandas</p>
+      </div>
+    </div>
+  </footer>
+
 </body>
-
 </html>

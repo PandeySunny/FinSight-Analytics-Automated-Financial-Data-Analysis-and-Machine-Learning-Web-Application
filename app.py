@@ -1,25 +1,29 @@
-
 import os
 import uuid
 from datetime import datetime
 from flask import Flask, render_template, request, redirect, url_for, flash, session
+from flask_session import Session
 from werkzeug.utils import secure_filename
 import pandas as pd
 import matplotlib
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
+import matplotlib.patches as mpatches
 import seaborn as sns
 import traceback
-from sklearn.cluster import KMeans
-from sklearn.ensemble import IsolationForest
+from sklearn.cluster import KMeans, DBSCAN
+from sklearn.ensemble import IsolationForest, RandomForestClassifier, GradientBoostingClassifier
 from sklearn.decomposition import PCA
-from sklearn.preprocessing import StandardScaler
+from sklearn.preprocessing import StandardScaler, LabelEncoder
 from sklearn.impute import SimpleImputer
+from sklearn.model_selection import train_test_split
+from sklearn.metrics import classification_report, roc_auc_score, confusion_matrix
+from sklearn.linear_model import LogisticRegression
 import numpy as np
 import json
-import httpx
+import warnings
+warnings.filterwarnings("ignore")
 
-# Load environment variables from .env file
 try:
     from dotenv import load_dotenv
     load_dotenv()
@@ -29,34 +33,891 @@ except ImportError:
 # --- Configuration ---
 UPLOAD_FOLDER = "uploads"
 PLOTS_FOLDER = "static/plots"
-ALLOWED_EXTENSIONS = {"csv"}
-SECRET_KEY = "your-secret-key-change-in-production-" + uuid.uuid4().hex[:16]
+ALLOWED_EXTENSIONS = {"csv", "xlsx", "xls"}
+SECRET_KEY = "finsight-secret-" + uuid.uuid4().hex[:16]
 
 os.makedirs(UPLOAD_FOLDER, exist_ok=True)
 os.makedirs(PLOTS_FOLDER, exist_ok=True)
+os.makedirs("flask_sessions_data", exist_ok=True)
 
 app = Flask(__name__)
 app.config["UPLOAD_FOLDER"] = UPLOAD_FOLDER
 app.config["PLOTS_FOLDER"] = PLOTS_FOLDER
 app.secret_key = SECRET_KEY
 app.config["SESSION_TYPE"] = "filesystem"
-app.config["PERMANENT_SESSION_LIFETIME"] = 3600  # 1 hour
+app.config["SESSION_PERMANENT"] = True
+app.config["PERMANENT_SESSION_LIFETIME"] = 3600
+app.config["SESSION_FILE_DIR"] = "flask_sessions_data"
+app.config["MAX_CONTENT_LENGTH"] = 500 * 1024 * 1024
 
-# Allow uploads up to 500 MB
-app.config["MAX_CONTENT_LENGTH"] = 500 * 1024 * 1024  # 500 MB
+Session(app)
+sns.set_theme(style="whitegrid", palette="muted")
 
-sns.set(style="whitegrid")
+# ──────────────────────────────────────────────────────────────────────────────
+# FINANCIAL DOMAIN INTELLIGENCE
+# ──────────────────────────────────────────────────────────────────────────────
 
-# --- DeepSeek Configuration ---
-DEEPSEEK_API_KEY = os.getenv("DEEPSEEK_API_KEY", "")
-DEEPSEEK_MODEL = "deepseek-chat"
-DEEPSEEK_API_URL = "https://api.deepseek.com/chat/completions"
-USE_AI_API = True  # Set to True to use DeepSeek API (AI-powered insights enabled)
-if DEEPSEEK_API_KEY and USE_AI_API:
-    app.logger.info("✅ DeepSeek API key configured - using AI-powered insights")
-else:
-    app.logger.info("✅ Using intelligent rule-based insights (no API calls needed)")
+FINANCIAL_COLUMN_MAP = {
+    "amount":        ("transaction_amount", "numeric"),
+    "balance":       ("account_balance",    "numeric"),
+    "price":         ("price",              "numeric"),
+    "close":         ("closing_price",      "numeric"),
+    "open":          ("opening_price",      "numeric"),
+    "high":          ("daily_high",         "numeric"),
+    "low":           ("daily_low",          "numeric"),
+    "volume":        ("trade_volume",       "numeric"),
+    "revenue":       ("revenue",            "numeric"),
+    "expense":       ("expense",            "numeric"),
+    "profit":        ("profit",             "numeric"),
+    "loss":          ("loss",               "numeric"),
+    "income":        ("income",             "numeric"),
+    "salary":        ("salary",             "numeric"),
+    "credit":        ("credit",             "numeric"),
+    "debit":         ("debit",              "numeric"),
+    "loan":          ("loan_amount",        "numeric"),
+    "interest":      ("interest_rate",      "numeric"),
+    "tax":           ("tax",                "numeric"),
+    "fee":           ("fee",                "numeric"),
+    "cost":          ("cost",               "numeric"),
+    "invest":        ("investment",         "numeric"),
+    "return":        ("return",             "numeric"),
+    "yield":         ("yield",              "numeric"),
+    "dividend":      ("dividend",           "numeric"),
+    "equity":        ("equity",             "numeric"),
+    "asset":         ("asset",              "numeric"),
+    "liabilit":      ("liability",          "numeric"),
+    "debt":          ("debt",               "numeric"),
+    "cash":          ("cash",               "numeric"),
+    "withdraw":      ("withdrawal",         "numeric"),
+    "deposit":       ("deposit",            "numeric"),
+    "payment":       ("payment",            "numeric"),
+    "transaction":   ("transaction",        "numeric"),
+    "account":       ("account",            "categorical"),
+    "customer":      ("customer",           "categorical"),
+    "merchant":      ("merchant",           "categorical"),
+    "category":      ("category",           "categorical"),
+    "type":          ("type",               "categorical"),
+    "status":        ("status",             "categorical"),
+    "fraud":         ("fraud_label",        "label"),
+    "label":         ("label",              "label"),
+    "class":         ("class",              "label"),
+    "flag":          ("flag",               "label"),
+    "date":          ("date",               "datetime"),
+    "time":          ("time",               "datetime"),
+    "timestamp":     ("timestamp",          "datetime"),
+    "period":        ("period",             "datetime"),
+    "month":         ("month",              "datetime"),
+    "year":          ("year",               "datetime"),
+}
 
+
+def classify_columns(df):
+    """Map dataset columns to financial roles via heuristics."""
+    roles = {"numeric": [], "categorical": [], "label": [], "datetime": [], "id": []}
+    for col in df.columns:
+        col_lower = col.lower()
+        matched = False
+        for keyword, (_, role) in FINANCIAL_COLUMN_MAP.items():
+            if keyword in col_lower:
+                if role == "numeric" and not pd.api.types.is_numeric_dtype(df[col]):
+                    continue
+                roles[role].append(col)
+                matched = True
+                break
+        if not matched:
+            if pd.api.types.is_numeric_dtype(df[col]):
+                # Likely ID if high cardinality & integer
+                if df[col].nunique() > 0.9 * len(df) and pd.api.types.is_integer_dtype(df[col]):
+                    roles["id"].append(col)
+                else:
+                    roles["numeric"].append(col)
+            elif pd.api.types.is_datetime64_any_dtype(df[col]):
+                roles["datetime"].append(col)
+            else:
+                roles["categorical"].append(col)
+    return roles
+
+
+def detect_dataset_type(df, roles):
+    """
+    Heuristically detect dataset domain:
+    transactions | market_data | banking | credit_risk | general
+    """
+    cols_lower = [c.lower() for c in df.columns]
+    score = {"transactions": 0, "market_data": 0, "banking": 0, "credit_risk": 0}
+
+    txn_keys   = ["amount", "merchant", "transaction", "payment", "withdraw", "deposit"]
+    mkt_keys   = ["open", "high", "low", "close", "volume", "price", "ticker", "symbol"]
+    bank_keys  = ["balance", "account", "credit", "debit", "interest", "loan"]
+    risk_keys  = ["fraud", "default", "risk", "credit_score", "label", "class"]
+
+    for key in txn_keys:
+        score["transactions"]  += sum(1 for c in cols_lower if key in c)
+    for key in mkt_keys:
+        score["market_data"]   += sum(1 for c in cols_lower if key in c)
+    for key in bank_keys:
+        score["banking"]       += sum(1 for c in cols_lower if key in c)
+    for key in risk_keys:
+        score["credit_risk"]   += sum(1 for c in cols_lower if key in c)
+
+    best = max(score, key=score.get)
+    return best if score[best] > 0 else "general"
+
+
+# ──────────────────────────────────────────────────────────────────────────────
+# ML PIPELINE — MODULAR & FINANCIAL-SECTOR FOCUSED
+# ──────────────────────────────────────────────────────────────────────────────
+
+def run_ml_pipeline(df, roles, dataset_type):
+    """
+    Comprehensive ML analysis:
+      1. Fraud / Anomaly Detection  (Isolation Forest + optional supervised)
+      2. Customer Segmentation       (K-Means + DBSCAN comparison)
+      3. Risk Scoring                (rule-based quantile tiers)
+      4. PCA visualization
+      5. Market-specific: volatility, rolling stats (if market_data)
+      6. Time-series decomposition   (if datetime present)
+    Returns a rich results dict.
+    """
+    results = {
+        "dataset_type": dataset_type,
+        "anomaly": {},
+        "segmentation": {},
+        "risk": {},
+        "pca": {},
+        "market": {},
+        "timeseries": {},
+        "supervised": {},
+        "features_used": [],
+    }
+
+    numeric_cols = roles["numeric"]
+    if not numeric_cols:
+        app.logger.warning("No numeric columns found — skipping ML pipeline.")
+        return results
+
+    # ── Prepare feature matrix ──
+    X_raw = df[numeric_cols].copy()
+    imputer = SimpleImputer(strategy="median")
+    X_imp   = imputer.fit_transform(X_raw)
+    scaler  = StandardScaler()
+    X_scaled = scaler.fit_transform(X_imp)
+    results["features_used"] = numeric_cols
+
+    # ── 1. Anomaly Detection ──
+    try:
+        iso = IsolationForest(contamination=0.02, random_state=42, n_estimators=100)
+        iso_labels = iso.fit_predict(X_scaled)          # -1 = anomaly, 1 = normal
+        iso_scores = iso.decision_function(X_scaled)    # lower = more anomalous
+        df["__anomaly__"] = (iso_labels == -1).astype(int)
+        df["__anomaly_score__"] = -iso_scores           # invert so higher = more suspicious
+
+        results["anomaly"] = {
+            "labels":     iso_labels,
+            "scores":     -iso_scores,
+            "count":      int((iso_labels == -1).sum()),
+            "rate_pct":   round(float((iso_labels == -1).mean() * 100), 2),
+            "top_indices": list(np.argsort(-iso_scores)[:20]),  # top 20 suspicious rows
+        }
+        app.logger.info("Anomaly detection: %d flagged", results["anomaly"]["count"])
+    except Exception as e:
+        app.logger.error("Anomaly detection failed: %s", e)
+
+    # ── 2. Customer / Transaction Segmentation ──
+    try:
+        n_clusters = min(5, max(2, len(df) // 500))  # adaptive cluster count
+        kmeans = KMeans(n_clusters=n_clusters, random_state=42, n_init=10, max_iter=300)
+        km_labels = kmeans.fit_predict(X_scaled)
+        df["__segment__"] = km_labels
+
+        # Segment profiles
+        seg_profiles = []
+        for seg_id in sorted(np.unique(km_labels)):
+            mask = km_labels == seg_id
+            profile = {"segment": int(seg_id), "size": int(mask.sum())}
+            for col in numeric_cols[:8]:
+                profile[col + "_mean"] = round(float(df.loc[mask, col].mean()), 4)
+            # Anomaly rate per segment
+            if "__anomaly__" in df.columns:
+                profile["anomaly_rate_pct"] = round(float(df.loc[mask, "__anomaly__"].mean() * 100), 2)
+            seg_profiles.append(profile)
+
+        results["segmentation"] = {
+            "labels":    km_labels,
+            "n_clusters": n_clusters,
+            "profiles":  seg_profiles,
+            "inertia":   round(float(kmeans.inertia_), 2),
+        }
+        app.logger.info("Segmentation: %d clusters", n_clusters)
+    except Exception as e:
+        app.logger.error("Segmentation failed: %s", e)
+
+    # ── 3. Risk Scoring (quantile-based tiers) ──
+    try:
+        # Use anomaly score to define risk tier
+        if "scores" in results["anomaly"]:
+            scores = results["anomaly"]["scores"]
+            risk_tiers = pd.qcut(scores, q=4, labels=["Low", "Medium", "High", "Critical"],
+                                 duplicates="drop")
+            df["__risk_tier__"] = risk_tiers.astype(str)
+            tier_counts = df["__risk_tier__"].value_counts().to_dict()
+            results["risk"] = {
+                "tier_counts": tier_counts,
+                "tiers_series": risk_tiers,
+            }
+        app.logger.info("Risk scoring complete")
+    except Exception as e:
+        app.logger.error("Risk scoring failed: %s", e)
+
+    # ── 4. PCA (2D + 3D components) ──
+    try:
+        n_components = min(3, X_scaled.shape[1])
+        pca = PCA(n_components=n_components)
+        coords = pca.fit_transform(X_scaled)
+        results["pca"] = {
+            "coords":           coords,
+            "explained_var":    [round(v * 100, 2) for v in pca.explained_variance_ratio_],
+            "cumulative_var":   round(float(pca.explained_variance_ratio_.sum() * 100), 2),
+        }
+        app.logger.info("PCA: %.1f%% variance explained", results["pca"]["cumulative_var"])
+    except Exception as e:
+        app.logger.error("PCA failed: %s", e)
+
+    # ── 5. Market-specific analysis ──
+    if dataset_type == "market_data":
+        try:
+            price_cols = [c for c in numeric_cols if any(k in c.lower()
+                          for k in ["close", "price", "last"])]
+            if price_cols:
+                col = price_cols[0]
+                df["__return__"]     = df[col].pct_change()
+                df["__volatility__"] = df["__return__"].rolling(window=20).std() * np.sqrt(252)
+                df["__ma20__"]       = df[col].rolling(20).mean()
+                df["__ma50__"]       = df[col].rolling(50).mean()
+                df["__rsi__"]        = compute_rsi(df[col])
+                results["market"] = {
+                    "price_col":   col,
+                    "avg_return":  round(float(df["__return__"].mean() * 100), 4),
+                    "volatility":  round(float(df["__volatility__"].mean()), 4),
+                    "sharpe":      compute_sharpe(df["__return__"]),
+                    "max_drawdown": compute_max_drawdown(df[col]),
+                    "current_rsi": round(float(df["__rsi__"].dropna().iloc[-1]), 2)
+                                   if not df["__rsi__"].dropna().empty else None,
+                }
+            app.logger.info("Market analysis complete")
+        except Exception as e:
+            app.logger.error("Market analysis failed: %s", e)
+
+    # ── 6. Supervised fraud detection (if label column exists) ──
+    label_cols = roles.get("label", [])
+    if label_cols:
+        try:
+            label_col = label_cols[0]
+            y = df[label_col].copy()
+            # Encode if needed
+            if not pd.api.types.is_numeric_dtype(y):
+                le = LabelEncoder()
+                y  = le.fit_transform(y.astype(str))
+            y = pd.Series(y).fillna(0).astype(int)
+
+            # Only run if at least 2 classes present
+            if y.nunique() >= 2:
+                X_sup = X_scaled
+                X_tr, X_te, y_tr, y_te = train_test_split(
+                    X_sup, y, test_size=0.25, random_state=42, stratify=y)
+                clf = GradientBoostingClassifier(
+                    n_estimators=100, max_depth=4, random_state=42)
+                clf.fit(X_tr, y_tr)
+                y_pred     = clf.predict(X_te)
+                y_prob     = clf.predict_proba(X_te)[:, 1]
+                roc_auc    = round(float(roc_auc_score(y_te, y_prob)), 4)
+                importances = dict(zip(numeric_cols,
+                                       [round(float(v), 4) for v in clf.feature_importances_]))
+                # sort by importance
+                importances = dict(sorted(importances.items(),
+                                          key=lambda x: x[1], reverse=True))
+                results["supervised"] = {
+                    "label_col":   label_col,
+                    "roc_auc":     roc_auc,
+                    "importances": importances,
+                    "report":      classification_report(y_te, y_pred, output_dict=True),
+                }
+                app.logger.info("Supervised model ROC-AUC: %.4f", roc_auc)
+        except Exception as e:
+            app.logger.error("Supervised model failed: %s", e)
+
+    return results
+
+
+# ── Financial metric helpers ──
+
+def compute_rsi(prices, window=14):
+    delta = prices.diff()
+    gain  = delta.clip(lower=0).rolling(window).mean()
+    loss  = (-delta.clip(upper=0)).rolling(window).mean()
+    rs    = gain / loss.replace(0, np.nan)
+    return 100 - (100 / (1 + rs))
+
+
+def compute_sharpe(returns, risk_free=0.0, periods=252):
+    excess = returns - risk_free / periods
+    if excess.std() == 0:
+        return 0.0
+    return round(float(np.sqrt(periods) * excess.mean() / excess.std()), 4)
+
+
+def compute_max_drawdown(prices):
+    peak = prices.cummax()
+    dd   = (prices - peak) / peak
+    return round(float(dd.min() * 100), 2)
+
+
+# ──────────────────────────────────────────────────────────────────────────────
+# FINANCIAL KPIs
+# ──────────────────────────────────────────────────────────────────────────────
+
+def compute_financial_kpis(df, roles, ml_results):
+    kpis = {
+        "total_records":      len(df),
+        "fraud_count":        ml_results["anomaly"].get("count", 0),
+        "fraud_rate_pct":     ml_results["anomaly"].get("rate_pct", 0.0),
+        "num_segments":       ml_results["segmentation"].get("n_clusters", 0),
+        "segment_profiles":   ml_results["segmentation"].get("profiles", []),
+        "dataset_type":       ml_results.get("dataset_type", "general"),
+        "pca_variance":       ml_results["pca"].get("cumulative_var", 0),
+        "supervised_auc":     ml_results["supervised"].get("roc_auc"),
+        "top_features":       list(ml_results["supervised"].get("importances", {}).keys())[:5],
+        "risk_tier_counts":   ml_results["risk"].get("tier_counts", {}),
+        "market_metrics":     ml_results.get("market", {}),
+        # volume & avg from primary financial column
+        "primary_col":        None,
+        "total_volume":       None,
+        "avg_transaction":    None,
+        "median_transaction": None,
+        "std_transaction":    None,
+        "p95_transaction":    None,
+    }
+
+    if roles["numeric"]:
+        # Prefer amount/balance/price columns
+        fin_priority = ["amount", "balance", "price", "close", "revenue",
+                        "payment", "transaction", "cost", "income"]
+        primary = None
+        for keyword in fin_priority:
+            for col in roles["numeric"]:
+                if keyword in col.lower():
+                    primary = col
+                    break
+            if primary:
+                break
+        if not primary:
+            primary = roles["numeric"][0]
+
+        kpis["primary_col"] = primary
+        series = df[primary].dropna()
+        kpis["total_volume"]       = round(float(series.sum()), 2)
+        kpis["avg_transaction"]    = round(float(series.mean()), 2)
+        kpis["median_transaction"] = round(float(series.median()), 2)
+        kpis["std_transaction"]    = round(float(series.std()), 2)
+        kpis["p95_transaction"]    = round(float(series.quantile(0.95)), 2)
+
+    return kpis
+
+
+# ──────────────────────────────────────────────────────────────────────────────
+# PLOT GENERATION — FINANCIAL-SECTOR CHARTS
+# ──────────────────────────────────────────────────────────────────────────────
+
+PALETTE = {
+    "primary":    "#1A56DB",
+    "danger":     "#E02424",
+    "success":    "#057A55",
+    "warning":    "#FF8C00",
+    "neutral":    "#6B7280",
+    "segments":   ["#1A56DB", "#057A55", "#FF8C00", "#9333EA", "#E02424"],
+    "heatmap":    "RdYlGn",
+}
+
+
+def generate_plots(df, prefix, ml_results, roles, dataset_type):
+    plot_files = []
+    numeric  = roles["numeric"]
+    cat_cols = roles["categorical"]
+    pca_data = ml_results["pca"].get("coords")
+    anomaly  = ml_results["anomaly"]
+    seg      = ml_results["segmentation"]
+
+    # ── 1. Amount / Price Distribution with KDE ──
+    for col in numeric[:3]:
+        try:
+            fig, axes = plt.subplots(1, 2, figsize=(12, 4))
+            data = df[col].dropna()
+
+            axes[0].hist(data, bins=50, color=PALETTE["primary"], alpha=0.7, edgecolor="white")
+            axes[0].set_title(f"Distribution — {col}", fontweight="bold")
+            axes[0].set_xlabel(col)
+            axes[0].set_ylabel("Frequency")
+
+            q1, q3 = data.quantile(0.25), data.quantile(0.75)
+            iqr    = q3 - q1
+            outlier_mask = (data < q1 - 1.5*iqr) | (data > q3 + 1.5*iqr)
+            axes[1].boxplot(data, vert=True, patch_artist=True,
+                            boxprops=dict(facecolor=PALETTE["primary"], alpha=0.5),
+                            medianprops=dict(color="red", linewidth=2))
+            axes[1].set_title(f"Boxplot ({outlier_mask.sum()} outliers) — {col}", fontweight="bold")
+            axes[1].set_ylabel(col)
+
+            plt.tight_layout()
+            fname = f"{prefix}_dist_{col}.png".replace(" ", "_")
+            plt.savefig(os.path.join(app.config["PLOTS_FOLDER"], fname), dpi=90, bbox_inches="tight")
+            plt.close()
+            plot_files.append({"path": f"/static/plots/{fname}", "title": f"Distribution & Outliers: {col}",
+                                "category": "distribution"})
+        except Exception:
+            app.logger.exception("Distribution plot failed for %s", col)
+
+    # ── 2. Correlation Heatmap ──
+    if len(numeric) >= 2:
+        try:
+            cols_for_corr = numeric[:12]
+            corr = df[cols_for_corr].corr()
+            fig, ax = plt.subplots(figsize=(max(8, len(cols_for_corr)), max(6, len(cols_for_corr) - 1)))
+            mask = np.triu(np.ones_like(corr, dtype=bool))
+            sns.heatmap(corr, mask=mask, annot=len(cols_for_corr) <= 8,
+                        fmt=".2f", cmap="coolwarm", vmin=-1, vmax=1,
+                        linewidths=0.5, ax=ax, cbar_kws={"shrink": 0.8})
+            ax.set_title("Feature Correlation Matrix", fontweight="bold", fontsize=14)
+            plt.tight_layout()
+            fname = f"{prefix}_correlation.png"
+            plt.savefig(os.path.join(app.config["PLOTS_FOLDER"], fname), dpi=90, bbox_inches="tight")
+            plt.close()
+            plot_files.append({"path": f"/static/plots/{fname}", "title": "Correlation Matrix",
+                                "category": "correlation"})
+        except Exception:
+            app.logger.exception("Correlation heatmap failed")
+
+    # ── 3. Anomaly / Fraud Scatter (PCA) ──
+    if pca_data is not None and "labels" in anomaly:
+        try:
+            fig, ax = plt.subplots(figsize=(10, 7))
+            labels  = anomaly["labels"]
+            colors  = np.where(labels == -1, PALETTE["danger"], PALETTE["primary"])
+            scatter = ax.scatter(pca_data[:, 0], pca_data[:, 1],
+                                 c=colors, s=12, alpha=0.5, linewidths=0)
+            normal_patch  = mpatches.Patch(color=PALETTE["primary"], label=f"Normal ({(labels==1).sum():,})")
+            anomaly_patch = mpatches.Patch(color=PALETTE["danger"],
+                                           label=f"Anomaly/Fraud ({(labels==-1).sum():,})")
+            ax.legend(handles=[normal_patch, anomaly_patch], loc="upper right", fontsize=11)
+            ax.set_title("Fraud & Anomaly Detection (PCA Projection)", fontweight="bold", fontsize=14)
+            ax.set_xlabel(f"PC1 ({ml_results['pca']['explained_var'][0]:.1f}% variance)")
+            ax.set_ylabel(f"PC2 ({ml_results['pca']['explained_var'][1]:.1f}% variance)"
+                          if len(ml_results['pca']['explained_var']) > 1 else "PC2")
+            plt.tight_layout()
+            fname = f"{prefix}_anomaly_pca.png"
+            plt.savefig(os.path.join(app.config["PLOTS_FOLDER"], fname), dpi=90, bbox_inches="tight")
+            plt.close()
+            plot_files.append({"path": f"/static/plots/{fname}",
+                                "title": "Anomaly / Fraud Detection",
+                                "category": "fraud"})
+        except Exception:
+            app.logger.exception("Anomaly PCA plot failed")
+
+    # ── 4. Customer Segmentation (PCA) ──
+    if pca_data is not None and "labels" in seg:
+        try:
+            fig, ax = plt.subplots(figsize=(10, 7))
+            seg_labels = seg["labels"]
+            n_segs     = seg["n_clusters"]
+            for i in range(n_segs):
+                mask = seg_labels == i
+                color = PALETTE["segments"][i % len(PALETTE["segments"])]
+                ax.scatter(pca_data[mask, 0], pca_data[mask, 1],
+                           s=15, alpha=0.6, color=color, label=f"Segment {i} (n={mask.sum():,})")
+            ax.legend(loc="upper right", fontsize=10)
+            ax.set_title(f"Customer Segmentation — {n_segs} Clusters (K-Means + PCA)", fontweight="bold", fontsize=14)
+            ax.set_xlabel(f"PC1 ({ml_results['pca']['explained_var'][0]:.1f}% variance)")
+            ax.set_ylabel(f"PC2 ({ml_results['pca']['explained_var'][1]:.1f}% variance)"
+                          if len(ml_results['pca']['explained_var']) > 1 else "PC2")
+            plt.tight_layout()
+            fname = f"{prefix}_segmentation.png"
+            plt.savefig(os.path.join(app.config["PLOTS_FOLDER"], fname), dpi=90, bbox_inches="tight")
+            plt.close()
+            plot_files.append({"path": f"/static/plots/{fname}",
+                                "title": f"Customer Segmentation ({n_segs} Clusters)",
+                                "category": "segmentation"})
+        except Exception:
+            app.logger.exception("Segmentation PCA plot failed")
+
+    # ── 5. Segment Profiles Heatmap ──
+    if seg.get("profiles") and len(numeric) >= 2:
+        try:
+            profiles    = seg["profiles"]
+            profile_df  = pd.DataFrame(profiles).set_index("segment")
+            metric_cols = [c for c in profile_df.columns
+                           if c not in ("size", "anomaly_rate_pct")][:8]
+            if metric_cols:
+                profile_subset = profile_df[metric_cols]
+                profile_norm   = (profile_subset - profile_subset.min()) / \
+                                 (profile_subset.max() - profile_subset.min() + 1e-9)
+                fig, ax = plt.subplots(figsize=(max(8, len(metric_cols)), len(profiles) + 1))
+                sns.heatmap(profile_norm, annot=profile_subset.values,
+                            fmt=".2f", cmap=PALETTE["heatmap"], ax=ax,
+                            linewidths=0.5, cbar_kws={"label": "Normalized value"})
+                ax.set_title("Segment Profile Comparison (normalised)", fontweight="bold", fontsize=14)
+                ax.set_xlabel("Feature")
+                ax.set_ylabel("Segment")
+                plt.tight_layout()
+                fname = f"{prefix}_segment_profiles.png"
+                plt.savefig(os.path.join(app.config["PLOTS_FOLDER"], fname), dpi=90, bbox_inches="tight")
+                plt.close()
+                plot_files.append({"path": f"/static/plots/{fname}",
+                                    "title": "Segment Profile Heatmap",
+                                    "category": "segmentation"})
+        except Exception:
+            app.logger.exception("Segment profile heatmap failed")
+
+    # ── 6. Risk Tier Distribution ──
+    if ml_results["risk"].get("tier_counts"):
+        try:
+            tier_counts = ml_results["risk"]["tier_counts"]
+            tier_order  = ["Low", "Medium", "High", "Critical"]
+            labels = [t for t in tier_order if t in tier_counts]
+            values = [tier_counts[t] for t in labels]
+            colors = [PALETTE["success"], PALETTE["warning"], PALETTE["danger"], "#7B0000"][:len(labels)]
+
+            fig, axes = plt.subplots(1, 2, figsize=(12, 5))
+            axes[0].bar(labels, values, color=colors, edgecolor="white", width=0.6)
+            axes[0].set_title("Risk Tier Distribution", fontweight="bold", fontsize=13)
+            axes[0].set_ylabel("Record Count")
+            for i, (l, v) in enumerate(zip(labels, values)):
+                axes[0].text(i, v + max(values)*0.01, f"{v:,}", ha="center", fontsize=10)
+
+            axes[1].pie(values, labels=labels, colors=colors, autopct="%1.1f%%",
+                        startangle=90, pctdistance=0.8,
+                        wedgeprops={"edgecolor": "white", "linewidth": 1.5})
+            axes[1].set_title("Risk Tier Breakdown", fontweight="bold", fontsize=13)
+
+            plt.tight_layout()
+            fname = f"{prefix}_risk_tiers.png"
+            plt.savefig(os.path.join(app.config["PLOTS_FOLDER"], fname), dpi=90, bbox_inches="tight")
+            plt.close()
+            plot_files.append({"path": f"/static/plots/{fname}",
+                                "title": "Risk Tier Distribution",
+                                "category": "risk"})
+        except Exception:
+            app.logger.exception("Risk tier plot failed")
+
+    # ── 7. Feature Importance (supervised) ──
+    if ml_results["supervised"].get("importances"):
+        try:
+            imp  = ml_results["supervised"]["importances"]
+            cols = list(imp.keys())[:12]
+            vals = [imp[c] for c in cols]
+            fig, ax = plt.subplots(figsize=(9, max(4, len(cols) * 0.5)))
+            y_pos   = range(len(cols))
+            bars    = ax.barh(y_pos, vals, color=PALETTE["primary"], alpha=0.8, edgecolor="white")
+            ax.set_yticks(y_pos)
+            ax.set_yticklabels(cols, fontsize=11)
+            ax.invert_yaxis()
+            ax.set_xlabel("Feature Importance Score")
+            ax.set_title(f"Feature Importance — Fraud Model  (ROC-AUC: {ml_results['supervised']['roc_auc']:.4f})",
+                         fontweight="bold", fontsize=13)
+            for bar, val in zip(bars, vals):
+                ax.text(bar.get_width() + 0.001, bar.get_y() + bar.get_height()/2,
+                        f"{val:.4f}", va="center", fontsize=9)
+            plt.tight_layout()
+            fname = f"{prefix}_feature_importance.png"
+            plt.savefig(os.path.join(app.config["PLOTS_FOLDER"], fname), dpi=90, bbox_inches="tight")
+            plt.close()
+            plot_files.append({"path": f"/static/plots/{fname}",
+                                "title": "Feature Importance (Fraud Model)",
+                                "category": "supervised"})
+        except Exception:
+            app.logger.exception("Feature importance plot failed")
+
+    # ── 8. Market / Time-series charts ──
+    if dataset_type == "market_data" and "__return__" in df.columns:
+        _plot_market_charts(df, prefix, plot_files, ml_results)
+
+    # ── 9. Transaction timeline (if datetime present) ──
+    if roles["datetime"]:
+        _plot_time_series(df, roles, numeric, prefix, plot_files)
+
+    # ── 10. Categorical distribution ──
+    for col in cat_cols[:2]:
+        try:
+            counts = df[col].fillna("(Missing)").value_counts().nlargest(12)
+            fig, ax = plt.subplots(figsize=(9, 4))
+            sns.barplot(x=counts.values, y=counts.index, ax=ax,
+                        palette="Blues_r")
+            ax.set_title(f"Top Categories — {col}", fontweight="bold", fontsize=13)
+            ax.set_xlabel("Count")
+            plt.tight_layout()
+            fname = f"{prefix}_cat_{col}.png".replace(" ", "_")
+            plt.savefig(os.path.join(app.config["PLOTS_FOLDER"], fname), dpi=90, bbox_inches="tight")
+            plt.close()
+            plot_files.append({"path": f"/static/plots/{fname}",
+                                "title": f"Category Distribution — {col}",
+                                "category": "categorical"})
+        except Exception:
+            app.logger.exception("Categorical plot failed for %s", col)
+
+    return plot_files
+
+
+def _plot_market_charts(df, prefix, plot_files, ml_results):
+    """Generate market-specific charts: price, volatility, RSI."""
+    price_col = ml_results["market"].get("price_col")
+    if not price_col or price_col not in df.columns:
+        return
+    try:
+        fig, axes = plt.subplots(3, 1, figsize=(14, 12), sharex=True)
+        # Price + MAs
+        df[price_col].plot(ax=axes[0], color=PALETTE["primary"], linewidth=1.2, label="Price")
+        if "__ma20__" in df.columns:
+            df["__ma20__"].plot(ax=axes[0], color=PALETTE["warning"], linewidth=1.2,
+                                linestyle="--", label="MA20")
+        if "__ma50__" in df.columns:
+            df["__ma50__"].plot(ax=axes[0], color=PALETTE["danger"], linewidth=1.2,
+                                linestyle="--", label="MA50")
+        axes[0].set_title("Price with Moving Averages", fontweight="bold")
+        axes[0].legend()
+        axes[0].set_ylabel("Price")
+        # Volatility
+        if "__volatility__" in df.columns:
+            df["__volatility__"].plot(ax=axes[1], color=PALETTE["warning"], linewidth=1.0)
+            axes[1].set_title("Rolling 20-Day Annualised Volatility", fontweight="bold")
+            axes[1].set_ylabel("Volatility")
+        # RSI
+        if "__rsi__" in df.columns:
+            df["__rsi__"].plot(ax=axes[2], color=PALETTE["neutral"], linewidth=1.0)
+            axes[2].axhline(70, color=PALETTE["danger"],  linestyle="--", alpha=0.7, label="Overbought (70)")
+            axes[2].axhline(30, color=PALETTE["success"], linestyle="--", alpha=0.7, label="Oversold (30)")
+            axes[2].set_title("RSI (14)", fontweight="bold")
+            axes[2].set_ylabel("RSI")
+            axes[2].legend(loc="upper right")
+        plt.tight_layout()
+        fname = f"{prefix}_market_analysis.png"
+        plt.savefig(os.path.join(app.config["PLOTS_FOLDER"], fname), dpi=90, bbox_inches="tight")
+        plt.close()
+        plot_files.append({"path": f"/static/plots/{fname}",
+                            "title": "Market Analysis (Price, Volatility, RSI)",
+                            "category": "market"})
+    except Exception:
+        app.logger.exception("Market chart failed")
+
+
+def _plot_time_series(df, roles, numeric_cols, prefix, plot_files):
+    """Transaction volume / value over time."""
+    dt_col = roles["datetime"][0]
+    if dt_col not in df.columns:
+        return
+    try:
+        df_ts = df.copy()
+        df_ts[dt_col] = pd.to_datetime(df_ts[dt_col], errors="coerce")
+        df_ts = df_ts.dropna(subset=[dt_col]).sort_values(dt_col)
+        if df_ts.empty:
+            return
+        if numeric_cols:
+            val_col = numeric_cols[0]
+            # Resample to monthly if > 90 days span
+            span_days = (df_ts[dt_col].max() - df_ts[dt_col].min()).days
+            freq = "ME" if span_days > 90 else ("W" if span_days > 30 else "D")
+            monthly = df_ts.set_index(dt_col)[val_col].resample(freq).sum()
+            fig, axes = plt.subplots(2, 1, figsize=(13, 8))
+            monthly.plot(ax=axes[0], color=PALETTE["primary"], linewidth=1.5)
+            axes[0].fill_between(monthly.index, monthly.values, alpha=0.15,
+                                 color=PALETTE["primary"])
+            axes[0].set_title(f"Transaction Volume Over Time — {val_col}", fontweight="bold", fontsize=13)
+            axes[0].set_ylabel("Total Amount")
+            # Rolling mean overlay
+            rolling = monthly.rolling(3).mean()
+            rolling.plot(ax=axes[0], color=PALETTE["warning"], linestyle="--",
+                         linewidth=1.5, label="3-period MA")
+            axes[0].legend()
+            # Count
+            count_ts = df_ts.set_index(dt_col).resample(freq).size()
+            count_ts.plot(ax=axes[1], color=PALETTE["success"], linewidth=1.5)
+            axes[1].set_title("Transaction Count Over Time", fontweight="bold", fontsize=13)
+            axes[1].set_ylabel("Count")
+            plt.tight_layout()
+            fname = f"{prefix}_timeseries.png"
+            plt.savefig(os.path.join(app.config["PLOTS_FOLDER"], fname), dpi=90, bbox_inches="tight")
+            plt.close()
+            plot_files.append({"path": f"/static/plots/{fname}",
+                                "title": "Transaction Time-Series",
+                                "category": "timeseries"})
+    except Exception:
+        app.logger.exception("Time-series plot failed")
+
+
+# ──────────────────────────────────────────────────────────────────────────────
+# INSIGHTS ENGINE
+# ──────────────────────────────────────────────────────────────────────────────
+
+def generate_financial_insights(df, ml_results, kpis, roles, dataset_type):
+    """
+    Generate domain-specific financial insights using rule-based analysis.
+    Falls back gracefully — no external APIs required.
+    """
+    insights = {
+        "headline":        "",
+        "dataset_context": "",
+        "fraud_insight":   "",
+        "segment_insight": "",
+        "risk_insight":    "",
+        "market_insight":  "",
+        "supervised_insight": "",
+        "recommendations": [],
+        "red_flags":       [],
+        "opportunities":   [],
+        "data_quality":    "",
+    }
+
+    rows, cols = df.shape
+    fraud_rate = kpis["fraud_rate_pct"]
+
+    # ── Headline ──
+    domain_labels = {
+        "transactions": "Transaction",
+        "market_data":  "Market",
+        "banking":      "Banking",
+        "credit_risk":  "Credit Risk",
+        "general":      "Financial",
+    }
+    domain = domain_labels.get(dataset_type, "Financial")
+    insights["headline"] = (
+        f"{domain} dataset with {rows:,} records and {cols} features. "
+        f"ML pipeline identified {kpis['fraud_count']:,} anomalies "
+        f"({fraud_rate}% anomaly rate) across {kpis['num_segments']} behavioural segments."
+    )
+
+    # ── Dataset context ──
+    completeness = round((1 - df.isnull().mean().mean()) * 100, 1)
+    insights["dataset_context"] = (
+        f"Data completeness: {completeness}%. "
+        f"Primary financial signal: '{kpis['primary_col']}' — "
+        f"Total volume {kpis['total_volume']:,.2f} | "
+        f"Mean {kpis['avg_transaction']:,.2f} | "
+        f"Median {kpis['median_transaction']:,.2f} | "
+        f"95th-pct {kpis['p95_transaction']:,.2f}."
+        if kpis["total_volume"] is not None else
+        f"Data completeness: {completeness}%."
+    )
+
+    # ── Fraud & Anomaly ──
+    if fraud_rate < 1:
+        insights["fraud_insight"] = (
+            f"Low anomaly rate ({fraud_rate}%) — dataset appears largely clean. "
+            f"Isolated flag on {kpis['fraud_count']} records warrants spot-check.")
+    elif fraud_rate < 5:
+        insights["fraud_insight"] = (
+            f"Moderate anomaly rate ({fraud_rate}%, {kpis['fraud_count']:,} records). "
+            f"Recommend secondary review of flagged transactions, especially high-value outliers.")
+        insights["red_flags"].append(
+            f"{kpis['fraud_count']:,} anomalous transactions at {fraud_rate}% rate — review flagged segment.")
+    else:
+        insights["fraud_insight"] = (
+            f"⚠ High anomaly rate ({fraud_rate}%). {kpis['fraud_count']:,} records are statistically "
+            f"abnormal — potential systemic fraud, data entry issues, or market stress events.")
+        insights["red_flags"].append(
+            f"Critical: {fraud_rate}% anomaly rate exceeds acceptable threshold (5%). Immediate audit advised.")
+
+    # ── Segmentation ──
+    profiles = kpis["segment_profiles"]
+    if profiles:
+        largest = max(profiles, key=lambda p: p.get("size", 0))
+        riskiest = max(profiles, key=lambda p: p.get("anomaly_rate_pct", 0))
+        insights["segment_insight"] = (
+            f"{kpis['num_segments']} behavioural segments found. "
+            f"Largest segment ({largest['segment']}) contains {largest['size']:,} records "
+            f"({largest['size']/rows*100:.1f}% of total). "
+            f"Highest-risk segment ({riskiest['segment']}) has "
+            f"{riskiest.get('anomaly_rate_pct', 0):.1f}% anomaly rate.")
+        if riskiest.get("anomaly_rate_pct", 0) > 10:
+            insights["red_flags"].append(
+                f"Segment {riskiest['segment']} shows {riskiest['anomaly_rate_pct']:.1f}% anomaly rate — isolate for review.")
+        insights["opportunities"].append(
+            f"Segment {largest['segment']} is the largest customer cohort — ideal target for retention campaigns.")
+
+    # ── Risk Tiers ──
+    tier_counts = kpis["risk_tier_counts"]
+    if tier_counts:
+        critical = tier_counts.get("Critical", 0)
+        high     = tier_counts.get("High", 0)
+        insights["risk_insight"] = (
+            f"Risk tier breakdown — Critical: {critical:,} | High: {high:,} | "
+            f"Medium: {tier_counts.get('Medium', 0):,} | Low: {tier_counts.get('Low', 0):,}.")
+        if critical > rows * 0.05:
+            insights["red_flags"].append(
+                f"{critical:,} records in Critical tier — concentrate compliance review here.")
+
+    # ── Market ──
+    mkt = kpis["market_metrics"]
+    if mkt:
+        sharpe = mkt.get("sharpe", 0)
+        vol    = mkt.get("volatility", 0)
+        dd     = mkt.get("max_drawdown", 0)
+        rsi    = mkt.get("current_rsi")
+        insights["market_insight"] = (
+            f"Sharpe ratio: {sharpe:.2f} | Annualised volatility: {vol*100:.1f}% | "
+            f"Max drawdown: {dd:.1f}%."
+            + (f" Current RSI: {rsi:.1f} ({'overbought' if rsi > 70 else 'oversold' if rsi < 30 else 'neutral'})."
+               if rsi else ""))
+        if sharpe < 0:
+            insights["red_flags"].append(
+                f"Negative Sharpe ratio ({sharpe:.2f}) — risk-adjusted returns are subpar.")
+        if abs(dd) > 20:
+            insights["red_flags"].append(
+                f"Max drawdown of {dd:.1f}% — significant downside exposure detected.")
+        if vol > 0.3:
+            insights["red_flags"].append(
+                f"High annualised volatility ({vol*100:.1f}%) — consider hedging strategies.")
+
+    # ── Supervised model ──
+    if ml_results["supervised"].get("roc_auc"):
+        auc = ml_results["supervised"]["roc_auc"]
+        top = kpis["top_features"][:3]
+        insights["supervised_insight"] = (
+            f"Gradient Boosting fraud classifier trained on labelled data. "
+            f"ROC-AUC: {auc:.4f} ({'Excellent' if auc > 0.9 else 'Good' if auc > 0.8 else 'Moderate'}). "
+            f"Top predictive features: {', '.join(top)}.")
+        if auc > 0.9:
+            insights["opportunities"].append(
+                f"High-performance fraud model (AUC {auc:.2f}) — ready for production deployment.")
+
+    # ── Recommendations ──
+    if fraud_rate > 2:
+        insights["recommendations"].append(
+            "Implement real-time transaction monitoring for anomalous patterns identified in this analysis.")
+    insights["recommendations"].append(
+        f"Apply segment-specific thresholds — one-size-fits-all rules miss {kpis['num_segments']} distinct behavioural groups.")
+    if kpis["p95_transaction"] and kpis["avg_transaction"]:
+        ratio = kpis["p95_transaction"] / (kpis["avg_transaction"] or 1)
+        if ratio > 5:
+            insights["recommendations"].append(
+                f"95th-percentile value is {ratio:.0f}x the mean — consider separate risk policies for large transactions.")
+    if completeness < 90:
+        insights["recommendations"].append(
+            f"Data completeness at {completeness}% — missing values may bias ML model outputs; review data collection pipeline.")
+    insights["recommendations"].append(
+        "Schedule quarterly model retraining to capture evolving transaction patterns and adversarial drift.")
+
+    # ── Data quality ──
+    dupes = df.duplicated().sum()
+    missing_pct = round(df.isnull().mean().mean() * 100, 1)
+    quality_score = int(completeness - dupes / rows * 50)
+    insights["data_quality"] = (
+        f"Quality score: {min(100, quality_score)}/100 | "
+        f"Missing: {missing_pct}% | Duplicates: {dupes:,} | "
+        f"Columns: {cols} ({len(roles['numeric'])} numeric, {len(roles['categorical'])} categorical)")
+
+    return insights
+
+
+# ──────────────────────────────────────────────────────────────────────────────
+# UTILITY HELPERS
+# ──────────────────────────────────────────────────────────────────────────────
 
 def allowed_file(filename):
     return "." in filename and filename.rsplit(".", 1)[1].lower() in ALLOWED_EXTENSIONS
@@ -65,795 +926,231 @@ def allowed_file(filename):
 def unique_path(folder, name):
     base, ext = os.path.splitext(name)
     stamp = datetime.now().strftime("%Y%m%d%H%M%S")
-    uniq = f"{base}_{stamp}_{uuid.uuid4().hex[:6]}{ext}"
+    uniq  = f"{base}_{stamp}_{uuid.uuid4().hex[:6]}{ext}"
     return os.path.join(folder, uniq)
 
 
 def convert_datetime_columns(df):
-    """Convert datetime columns to year, month, day columns."""
     df_copy = df.copy()
     for col in df_copy.columns:
         if pd.api.types.is_datetime64_any_dtype(df_copy[col]):
             try:
-                df_copy[f"{col}_year"] = df_copy[col].dt.year
+                df_copy[f"{col}_year"]  = df_copy[col].dt.year
                 df_copy[f"{col}_month"] = df_copy[col].dt.month
-                df_copy[f"{col}_day"] = df_copy[col].dt.day
-                df_copy = df_copy.drop(columns=[col])
-                app.logger.info(f"Converted datetime column '{col}' to year/month/day")
-            except Exception as e:
-                app.logger.warning(f"Failed to convert datetime column '{col}': {e}")
+                df_copy[f"{col}_day"]   = df_copy[col].dt.day
+            except Exception:
+                pass
     return df_copy
 
 
-def detect_financial_columns(df):
-    """Heuristic to identify likely financial columns."""
-    numeric_cols = df.select_dtypes(include="number").columns.tolist()
-    financial_keywords = ["amount", "balance", "price", "cost", "revenue", "expense", "profit", "salary", "income", "transaction"]
-    
-    likely_financial = []
-    for col in numeric_cols:
-        if any(keyword in col.lower() for keyword in financial_keywords):
-            likely_financial.append(col)
-    
-    # If no explicit matches, just use all numeric columns if they exist
-    return likely_financial if likely_financial else numeric_cols
-
-
-def perform_fintech_analysis(df):
-    """
-    Performs K-Means Clustering for segmentation and Isolation Forest for fraud/anomaly detection.
-    Returns a dictionary with results.
-    """
-    results = {
-        "segments": None,
-        "anomalies": None,
-        "pca_data": None,
-        "segment_profiles": None,
-        "fraud_count": 0
-    }
-    
-    # 1. Select Features
-    features = detect_financial_columns(df)
-    if len(features) < 1:
-        return results
-
-    X = df[features].copy()
-    
-    # 2. Preprocessing (Impute & Scale)
-    try:
-        imputer = SimpleImputer(strategy="mean")
-        X_imputed = imputer.fit_transform(X)
-        scaler = StandardScaler()
-        X_scaled = scaler.fit_transform(X_imputed)
-    except Exception as e:
-        app.logger.error(f"Preprocessing failed: {e}")
-        return results
-
-    # 3. Clustering (Segmentation) - Default to 3 segments (faster than 4)
-    try:
-        kmeans = KMeans(n_clusters=3, random_state=42, n_init=5)  # Reduced from n_init=10 to 5
-        clusters = kmeans.fit_predict(X_scaled)
-        df["Segment"] = clusters
-        results["segments"] = clusters
-        
-        # Calculate Segment Profiles (Mean values of features)
-        profiles = df.groupby("Segment")[features].mean().reset_index()
-        results["segment_profiles"] = profiles.to_dict(orient="records")
-    except Exception as e:
-        app.logger.error(f"Clustering failed: {e}")
-
-    # 4. Anomaly Detection (Fraud Risk) - Contamination 1%
-    try:
-        iso = IsolationForest(contamination=0.01, random_state=42)
-        anomalies = iso.fit_predict(X_scaled)
-        # IsolationForest returns -1 for anomalies, 1 for normal. Map to Boolean or Label.
-        df["Is_Anomaly"] = anomalies == -1
-        results["anomalies"] = df["Is_Anomaly"].values
-        results["fraud_count"] = int(df["Is_Anomaly"].sum())
-    except Exception as e:
-        app.logger.error(f"Anomaly Detection failed: {e}")
-
-    # 5. PCA for Visualization (2D)
-    try:
-        if X_scaled.shape[1] >= 2:
-            pca = PCA(n_components=2)
-            coords = pca.fit_transform(X_scaled)
-            results["pca_data"] = coords
-    except Exception as e:
-        app.logger.error(f"PCA failed: {e}")
-
-    return results
-
-
-def generate_ai_insights(df, ml_results, dataset_explanation):
-    """
-    Generate insights about the dataset.
-    Uses DeepSeek API if enabled, otherwise falls back to rule-based analysis.
-    """
-    if USE_AI_API and DEEPSEEK_API_KEY:
-        try:
-            return call_deepseek_api(df, ml_results, dataset_explanation)
-        except Exception as e:
-            app.logger.warning(f"DeepSeek API call failed: {e}. Using fallback insights.")
-            return generate_fallback_insights(df, ml_results, dataset_explanation)
-    else:
-        return generate_fallback_insights(df, ml_results, dataset_explanation)
-
-
-def call_deepseek_api(df, ml_results, dataset_explanation):
-    """Call DeepSeek API to generate AI-powered insights."""
-    try:
-        numeric_cols = dataset_explanation.get('numeric_columns', [])
-        categorical_cols = dataset_explanation.get('categorical_columns', [])
-        
-        # Build prompt for DeepSeek
-        prompt = f"""Analyze this dataset and provide 5-part insights:
-
-Dataset: {dataset_explanation.get('filename', 'unknown')}
-- Rows: {dataset_explanation.get('total_rows', 0):,}
-- Columns: {dataset_explanation.get('total_cols', 0)}
-- Completeness: {dataset_explanation.get('completeness_percent', 0)}%
-- Numeric Features: {', '.join(numeric_cols[:5]) if numeric_cols else 'None'}
-- Categorical Features: {', '.join(categorical_cols[:5]) if categorical_cols else 'None'}
-
-Anomalies Found: {ml_results.get('fraud_count', 0)}
-
-Provide response in this exact format:
-SUMMARY: [One sentence overall dataset summary]
-FINDINGS: [3 key findings as bullet points]
-ANOMALIES: [Analysis of detected anomalies]
-SEGMENTS: [Information about data clusters]
-RECOMMENDATIONS: [3 actionable recommendations]"""
-
-        # Call DeepSeek API
-        headers = {
-            "Authorization": f"Bearer {DEEPSEEK_API_KEY}",
-            "Content-Type": "application/json"
-        }
-        payload = {
-            "model": DEEPSEEK_MODEL,
-            "messages": [{"role": "user", "content": prompt}],
-            "temperature": 0.7,
-            "max_tokens": 1500
-        }
-        
-        import httpx
-        with httpx.Client(timeout=30.0) as client:
-            response = client.post(DEEPSEEK_API_URL, json=payload, headers=headers)
-            response.raise_for_status()
-            
-        result = response.json()
-        content = result.get("choices", [{}])[0].get("message", {}).get("content", "")
-        
-        if not content:
-            return generate_fallback_insights(df, ml_results, dataset_explanation)
-        
-        # Parse response
-        insights = parse_deepseek_response(content, ml_results, dataset_explanation)
-        insights["source"] = "DeepSeek AI Analysis"
-        return insights
-        
-    except Exception as e:
-        app.logger.error(f"DeepSeek API error: {e}")
-        raise
-
-
-def parse_deepseek_response(content, ml_results, dataset_explanation):
-    """Parse DeepSeek API response into structured format."""
-    lines = content.split('\n')
-    insights = {
-        "overall_summary": "",
-        "key_findings": [],
-        "anomalies_insight": "",
-        "segments_insight": "",
-        "recommendations": []
-    }
-    
-    current_section = None
-    for line in lines:
-        line = line.strip()
-        if line.startswith("SUMMARY:"):
-            insights["overall_summary"] = line.replace("SUMMARY:", "").strip()
-        elif line.startswith("FINDINGS:"):
-            current_section = "findings"
-        elif line.startswith("ANOMALIES:"):
-            insights["anomalies_insight"] = line.replace("ANOMALIES:", "").strip()
-            current_section = None
-        elif line.startswith("SEGMENTS:"):
-            insights["segments_insight"] = line.replace("SEGMENTS:", "").strip()
-            current_section = None
-        elif line.startswith("RECOMMENDATIONS:"):
-            current_section = "recommendations"
-        elif line.startswith("- ") and current_section == "findings":
-            insights["key_findings"].append(line[2:])
-        elif line.startswith("- ") and current_section == "recommendations":
-            insights["recommendations"].append(line[2:])
-    
-    # Ensure we have data
-    if not insights["overall_summary"]:
-        insights["overall_summary"] = "Dataset analysis completed."
-    if not insights["key_findings"]:
-        insights["key_findings"] = ["Analysis generated from provided data"]
-    if not insights["anomalies_insight"]:
-        fraud_count = ml_results.get('fraud_count', 0)
-        insights["anomalies_insight"] = f"{fraud_count} anomalies detected in dataset"
-    if not insights["segments_insight"]:
-        insights["segments_insight"] = "Data segmentation analysis completed"
-    if not insights["recommendations"]:
-        insights["recommendations"] = ["Monitor identified patterns", "Validate findings with domain experts"]
-    
-    return insights
-
-
-
-def generate_fallback_insights(df, ml_results, dataset_explanation):
-    """
-    Generate insights without ChatGPT using rule-based analysis.
-    This ensures the app works even if OpenAI API is unavailable.
-    """
-    try:
-        numeric_cols = dataset_explanation['numeric_columns']
-        categorical_cols = dataset_explanation['categorical_columns']
-        
-        # Overall Summary
-        completeness = dataset_explanation['completeness_percent']
-        overall_summary = f"Dataset with {dataset_explanation['total_rows']:,} rows and {dataset_explanation['total_cols']} columns. "
-        
-        if completeness > 95:
-            overall_summary += "High quality data with excellent completeness. "
-        elif completeness > 80:
-            overall_summary += "Good data quality with minor gaps. "
-        else:
-            overall_summary += f"Data completeness at {completeness}% requires attention. "
-        
-        if numeric_cols:
-            overall_summary += f"Focused on {len(numeric_cols)} numeric and {len(categorical_cols)} categorical features."
-        
-        # Key Findings
-        key_findings = []
-        
-        # Finding 1: Data Quality
-        if completeness >= 95:
-            key_findings.append("✓ Exceptional data quality with high completeness and low missing values")
-        elif dataset_explanation['duplicate_rows'] > 0:
-            key_findings.append(f"⚠ Dataset contains {dataset_explanation['duplicate_rows']} duplicate records requiring cleanup")
-        else:
-            key_findings.append("✓ Dataset is clean with minimal anomalies")
-        
-        # Finding 2: Data Volume
-        if dataset_explanation['total_rows'] > 1000000:
-            key_findings.append(f"📊 Large dataset with {dataset_explanation['total_rows']:,} records - good for reliable analysis")
-        elif dataset_explanation['total_rows'] > 10000:
-            key_findings.append(f"📊 Moderate dataset size ({dataset_explanation['total_rows']:,} rows) provides solid insights")
-        else:
-            key_findings.append(f"📊 Smaller dataset ({dataset_explanation['total_rows']:,} rows) - consider collecting more data")
-        
-        # Finding 3: Numeric variation
-        if numeric_cols:
-            first_numeric = numeric_cols[0]
-            if first_numeric in df.columns:
-                std_val = df[first_numeric].std()
-                mean_val = df[first_numeric].mean()
-                if std_val > mean_val:
-                    key_findings.append(f"📈 High variability in {first_numeric} suggests diverse value distribution")
-                else:
-                    key_findings.append(f"📊 {first_numeric} shows relatively consistent patterns")
-        
-        # Anomalies Insight
-        fraud_count = ml_results.get('fraud_count', 0)
-        if fraud_count > 0:
-            anomaly_pct = (fraud_count / dataset_explanation['total_rows']) * 100
-            if anomaly_pct > 5:
-                anomalies_insight = f"⚠️ {fraud_count} anomalies detected ({anomaly_pct:.1f}% of data) - significant unusual patterns found"
-            elif anomaly_pct > 1:
-                anomalies_insight = f"🔍 {fraud_count} anomalies detected ({anomaly_pct:.1f}% of data) - minor unusual patterns"
-            else:
-                anomalies_insight = f"✓ {fraud_count} potential anomalies detected - data appears normal overall"
-        else:
-            anomalies_insight = "✓ No significant anomalies detected - dataset appears normal"
-        
-        # Segments Insight
-        segments = ml_results.get('segments')
-        if segments is not None and len(df) > 0:
-            unique_segments = len(np.unique(segments))
-            segments_insight = f"🎯 Data naturally clusters into {unique_segments} distinct segments - consider targeted strategies for each group"
-        else:
-            segments_insight = "📊 Segmentation analysis indicates relatively homogeneous dataset"
-        
-        # Recommendations
-        recommendations = [
-            "1. Monitor the identified anomalies closely - they may represent fraud, errors, or important outliers",
-            "2. Develop separate strategies for each customer segment to maximize engagement and revenue",
-            "3. Ensure ongoing data quality maintenance to preserve the high completeness level"
-        ]
-        
-        return {
-            "overall_summary": overall_summary,
-            "key_findings": key_findings[:3],
-            "anomalies_insight": anomalies_insight,
-            "segments_insight": segments_insight,
-            "recommendations": recommendations,
-            "source": "Rule-Based Analysis (ChatGPT Unavailable)"
-        }
-    except Exception as e:
-        app.logger.error(f"Fallback insight generation failed: {e}")
-        return {
-            "overall_summary": "Analysis completed - view the visualizations below for insights",
-            "key_findings": ["Check the charts above for visual patterns"],
-            "anomalies_insight": f"See anomaly visualization chart above",
-            "segments_insight": f"See segmentation visualization chart above",
-            "recommendations": ["Review the generated charts carefully"],
-            "source": "Basic Analysis",
-            "error": str(e)
-        }
-
-
-def generate_plots(df, prefix, ml_results=None):
-    """Generates plots (from df) and returns list of web paths like '/static/plots/xxx.png'."""
-    plot_files = []
-    numeric = df.select_dtypes(include="number").columns.tolist()
-    categorical = df.select_dtypes(include=["object", "category", "bool"]).columns.tolist()
-
-    # Histograms (up to 3) - Reduced from 6 for speed
-    for col in numeric[:3]:
-        try:
-            plt.figure(figsize=(6, 4))
-            sns.histplot(df[col].dropna(), kde=True, bins=30)
-            plt.title(f"Histogram: {col}")
-            fname = f"{prefix}_hist_{col}.png".replace(" ", "_")
-            path = os.path.join(app.config["PLOTS_FOLDER"], fname)
-            plt.tight_layout()
-            plt.savefig(path, dpi=80)  # Reduced DPI for speed
-            plt.close()
-            plot_files.append(f"/static/plots/{fname}")
-        except Exception:
-            app.logger.exception("Failed to create histogram for %s", col)
-
-    # Boxplots (up to 2) - Reduced from 3
-    for col in numeric[:2]:
-        try:
-            plt.figure(figsize=(6, 3))
-            sns.boxplot(x=df[col].dropna())
-            plt.title(f"Boxplot: {col}")
-            fname = f"{prefix}_box_{col}.png".replace(" ", "_")
-            path = os.path.join(app.config["PLOTS_FOLDER"], fname)
-            plt.tight_layout()
-            plt.savefig(path, dpi=80)
-            plt.close()
-            plot_files.append(f"/static/plots/{fname}")
-        except Exception:
-            app.logger.exception("Failed to create boxplot for %s", col)
-
-    # Pie charts for categorical top counts (up to 2) - Reduced from 3
-    for col in categorical[:2]:
-        try:
-            counts = df[col].fillna("<<Missing>>").value_counts().nlargest(6)
-            if counts.sum() == 0:
-                continue
-            plt.figure(figsize=(5, 5))
-            counts.plot.pie(autopct="%1.1f%%", startangle=90)
-            plt.ylabel("")
-            plt.title(f"Distribution: {col}")
-            fname = f"{prefix}_pie_{col}.png".replace(" ", "_")
-            path = os.path.join(app.config["PLOTS_FOLDER"], fname)
-            plt.tight_layout()
-            plt.savefig(path, dpi=80)
-            plt.close()
-            plot_files.append(f"/static/plots/{fname}")
-        except Exception:
-            app.logger.exception("Failed to create pie chart for %s", col)
-
-    # Bar chart for top categories (first categorical)
-    if categorical:
-        col = categorical[0]
-        try:
-            counts = df[col].fillna("<<Missing>>").value_counts().nlargest(10)
-            plt.figure(figsize=(8, 4))
-            sns.barplot(x=counts.values, y=counts.index)
-            plt.title(f"Top categories: {col}")
-            fname = f"{prefix}_bar_{col}.png".replace(" ", "_")
-            path = os.path.join(app.config["PLOTS_FOLDER"], fname)
-            plt.tight_layout()
-            plt.savefig(path, dpi=80)
-            plt.close()
-            plot_files.append(f"/static/plots/{fname}")
-        except Exception:
-            app.logger.exception("Failed to create bar chart for %s", col)
-
-    # Correlation heatmap for numeric features (if >=2)
-    if len(numeric) >= 2:
-        try:
-            corr = df[numeric].corr()
-            plt.figure(figsize=(8, 6))
-            sns.heatmap(corr, annot=True, fmt=".2f", cmap="coolwarm", vmin=-1, vmax=1)
-            plt.title("Correlation heatmap")
-            fname = f"{prefix}_corr.png".replace(" ", "_")
-            path = os.path.join(app.config["PLOTS_FOLDER"], fname)
-            plt.tight_layout()
-            plt.savefig(path, dpi=80)
-            plt.close()
-            plot_files.append(f"/static/plots/{fname}")
-        except Exception:
-            app.logger.exception("Failed to create correlation heatmap")
-
-    # --- Fintech ML Plots ---
-    if ml_results and ml_results.get("pca_data") is not None:
-        pca_data = ml_results["pca_data"]
-        
-        # 1. Segmentation Plot
-        try:
-            plt.figure(figsize=(8, 6))
-            segments = ml_results.get("segments")
-            if segments is not None:
-                sns.scatterplot(x=pca_data[:, 0], y=pca_data[:, 1], hue=segments, palette="viridis", s=60)
-                plt.title("Customer Segmentation (PCA projection)")
-                plt.xlabel("Principal Component 1")
-                plt.ylabel("Principal Component 2")
-                fname = f"{prefix}_segmentation.png".replace(" ", "_")
-                path = os.path.join(app.config["PLOTS_FOLDER"], fname)
-                plt.tight_layout()
-                plt.savefig(path, dpi=80)
-                plt.close()
-                plot_files.append(f"/static/plots/{fname}")
-        except Exception:
-            app.logger.exception("Failed to create segmentation plot")
-
-        # 2. Fraud/Anomaly Plot
-        try:
-            plt.figure(figsize=(8, 6))
-            anomalies = ml_results.get("anomalies")
-            if anomalies is not None:
-                # Color code: Blue (Normal), Red (High Risk)
-                colors = ["red" if x else "blue" for x in anomalies]
-                plt.scatter(pca_data[:, 0], pca_data[:, 1], c=colors, s=60, alpha=0.6)
-                # Create a custom legend
-                from matplotlib.lines import Line2D
-                legend_elements = [Line2D([0], [0], marker='o', color='w', label='Normal', markerfacecolor='blue', markersize=10),
-                                   Line2D([0], [0], marker='o', color='w', label='Potential Fraud', markerfacecolor='red', markersize=10)]
-                plt.legend(handles=legend_elements)
-                
-                plt.title("Fraud Risk Visualizer (PCA projection)")
-                plt.xlabel("Principal Component 1")
-                plt.ylabel("Principal Component 2")
-                fname = f"{prefix}_fraud.png".replace(" ", "_")
-                path = os.path.join(app.config["PLOTS_FOLDER"], fname)
-                plt.tight_layout()
-                plt.savefig(path, dpi=80)
-                plt.close()
-                plot_files.append(f"/static/plots/{fname}")
-        except Exception:
-            app.logger.exception("Failed to create fraud plot")
-
-    return plot_files
+def cleanup_old_files(max_age_seconds=3600):
+    import time
+    for folder in [app.config["UPLOAD_FOLDER"], app.config["PLOTS_FOLDER"]]:
+        if not os.path.exists(folder):
+            continue
+        now = time.time()
+        for fname in os.listdir(folder):
+            fpath = os.path.join(folder, fname)
+            try:
+                if os.path.isfile(fpath) and not fname.startswith("."):
+                    if now - os.path.getmtime(fpath) > max_age_seconds:
+                        os.remove(fpath)
+            except Exception:
+                pass
 
 
 def dataset_summary(df):
-    """Return a DataFrame summarizing columns (dtype, non-null count, unique, mean/std if numeric)."""
     rows = []
     for col in df.columns:
         try:
-            dtype = str(df[col].dtype)
+            dtype    = str(df[col].dtype)
             non_null = int(df[col].notna().sum())
-            unique = int(df[col].nunique(dropna=True))
-            sample = str(df[col].dropna().iloc[0]) if non_null > 0 else ""
-            info = {"column": col, "dtype": dtype, "non_null_count": non_null, "unique_values": unique, "sample_value": sample}
+            unique   = int(df[col].nunique(dropna=True))
+            sample   = str(df[col].dropna().iloc[0]) if non_null > 0 else ""
+            info     = {"Column": col, "Type": dtype,
+                        "Non-Null": non_null, "Unique": unique,
+                        "Sample": sample[:40]}
             if pd.api.types.is_numeric_dtype(df[col]):
-                info["mean"] = float(df[col].mean(skipna=True)) if non_null else None
-                info["std"] = float(df[col].std(skipna=True)) if non_null else None
+                info["Mean"] = round(float(df[col].mean(skipna=True)), 4) if non_null else None
+                info["Std"]  = round(float(df[col].std(skipna=True)),  4) if non_null else None
             else:
-                info["mean"] = None
-                info["std"] = None
+                info["Mean"] = None
+                info["Std"]  = None
             rows.append(info)
         except Exception:
-            app.logger.exception("Error summarizing column %s", col)
+            pass
     return pd.DataFrame(rows)
 
 
-def generate_dataset_explanation(df, filename, summary_source="full file"):
-    """Generate a comprehensive explanation of the dataset."""
-    total_rows, total_cols = df.shape
-    numeric_cols = df.select_dtypes(include="number").columns.tolist()
-    categorical_cols = df.select_dtypes(include=["object", "category"]).columns.tolist()
-    
-    # Calculate data quality metrics
-    total_cells = total_rows * total_cols
-    missing_cells = df.isna().sum().sum()
-    completeness = ((total_cells - missing_cells) / total_cells * 100) if total_cells > 0 else 0
-    
-    duplicate_rows = df.duplicated().sum()
-    
-    # Memory usage
-    memory_mb = df.memory_usage(deep=True).sum() / (1024 * 1024)
-    
-    explanation = {
-        "filename": filename,
-        "total_rows": total_rows,
-        "total_cols": total_cols,
-        "numeric_cols": len(numeric_cols),
-        "categorical_cols": len(categorical_cols),
-        "completeness_percent": round(completeness, 2),
-        "duplicate_rows": duplicate_rows,
-        "memory_mb": round(memory_mb, 2),
-        "summary_source": summary_source,
-        "column_list": list(df.columns),
-        "numeric_columns": numeric_cols,
-        "categorical_columns": categorical_cols,
-        "quality_status": "✅ High Quality" if completeness > 95 and duplicate_rows == 0 else "⚠️ Needs Attention"
-    }
-    
-    return explanation
+# ──────────────────────────────────────────────────────────────────────────────
+# ROUTES
+# ──────────────────────────────────────────────────────────────────────────────
 
-
-def cleanup_old_files(max_age_seconds=1800):
-    """Delete files in uploads and static/plots folders older than max_age_seconds (default 30 mins)."""
-    import time
-    
-    folders = [app.config["UPLOAD_FOLDER"], app.config["PLOTS_FOLDER"]]
-    now = time.time()
-    
-    for folder in folders:
-        if not os.path.exists(folder):
-            continue
-            
-        for filename in os.listdir(folder):
-            file_path = os.path.join(folder, filename)
-            try:
-                # Skip if it's a directory or the .gitkeep file
-                if not os.path.isfile(file_path) or filename.startswith("."):
-                    continue
-                    
-                # Check file age
-                file_age = now - os.path.getmtime(file_path)
-                if file_age > max_age_seconds:
-                    os.remove(file_path)
-                    # app.logger.info(f"Deleted old file: {filename}")
-            except Exception as e:
-                app.logger.warning(f"Error deleting file {filename}: {e}")
-
-
-def generate_chart_explanations():
-    """Generate simple explanations for basic chart types."""
-    explanations = {
-        "hist": {
-            "title": "📊 Distribution",
-            "description": "Shows how values are spread across ranges."
-        },
-        "box": {
-            "title": "📦 Outliers",
-            "description": "Displays data spread and highlights unusual values."
-        },
-        "pie": {
-            "title": "🥧 Proportions",
-            "description": "Shows percentage breakdown of categories."
-        },
-        "bar": {
-            "title": "📊 Comparison",
-            "description": "Compares frequencies across categories."
-        },
-        "corr": {
-            "title": "🔥 Relationships",
-            "description": "Shows how variables relate to each other."
-        }
-    }
-    return explanations
-
-
-def generate_dataset_explanation(df, filename, summary_source):
-    """Generate comprehensive dataset explanation for the template."""
-    import sys
-    
-    # Calculate duplicate rows (before cleaning)
-    # Since we already cleaned the data, we'll use 0 for now or could track it earlier
-    duplicate_rows = 0
-    
-    # Get numeric and categorical columns
-    numeric_cols = df.select_dtypes(include='number').columns.tolist()
-    categorical_cols = df.select_dtypes(include=['object', 'category', 'bool']).columns.tolist()
-    
-    # Calculate data completeness
-    total_cells = df.shape[0] * df.shape[1]
-    non_null_cells = df.notna().sum().sum()
-    completeness_percent = round((non_null_cells / total_cells * 100) if total_cells > 0 else 0, 1)
-    
-    # Determine quality status
-    if completeness_percent >= 95:
-        quality_status = "Excellent"
-    elif completeness_percent >= 80:
-        quality_status = "Good"
-    elif completeness_percent >= 60:
-        quality_status = "Fair"
-    else:
-        quality_status = "Poor"
-    
-    # Calculate memory usage in MB
-    memory_bytes = df.memory_usage(deep=True).sum()
-    memory_mb = round(memory_bytes / (1024 * 1024), 2)
-    
-    explanation = {
-        "total_rows": df.shape[0],
-        "total_cols": df.shape[1],
-        "completeness_percent": completeness_percent,
-        "quality_status": quality_status,
-        "filename": filename,
-        "summary_source": summary_source,
-        "memory_mb": memory_mb,
-        "numeric_cols": len(numeric_cols),
-        "categorical_cols": len(categorical_cols),
-        "numeric_columns": numeric_cols,
-        "categorical_columns": categorical_cols,
-        "duplicate_rows": duplicate_rows
-    }
-    
-    return explanation
-
-
-# --- Routes ---
 @app.route("/")
 def index():
-    """Professional landing page"""
     return render_template("index.html")
 
 
 @app.route("/upload", methods=["GET", "POST"])
 def upload_file():
-    message = None
-    uploaded_filename = session.get("uploaded_filename", None)
     if request.method == "POST":
-        action = request.form.get("action")
-        if action == "upload":
-            if "file" not in request.files:
-                flash("No file part")
-                return redirect(request.url)
-            file = request.files["file"]
-            if file.filename == "":
-                flash("No selected file")
-                return redirect(request.url)
-            if file and allowed_file(file.filename):
-                filename = secure_filename(file.filename)
-                path = unique_path(app.config["UPLOAD_FOLDER"], filename)
-                file.save(path)
-                basename = os.path.basename(path)
-                session["uploaded_filename"] = basename  # store only basename
-                size_mb = os.path.getsize(path) / (1024 * 1024)
-                message = f"Uploaded {basename} ({size_mb:.2f} MB)"
-                app.logger.info("Saved upload to %s (%.2f MB)", path, size_mb)
-                # Automatically redirect to results after successful upload
-                return redirect(url_for("results"))
-            else:
-                flash("Allowed file types: csv")
-                return redirect(request.url)
-        elif action == "analyze":
-            if not uploaded_filename:
-                flash("No file uploaded yet. Please upload a CSV first.")
-                return redirect(request.url)
-            return redirect(url_for("results"))
-    return render_template("upload.html", message=message, uploaded_filename=uploaded_filename)
+        file = request.files.get("file")
+        if not file or file.filename == "":
+            flash("Please select a file to upload.")
+            return redirect(request.url)
+        if not allowed_file(file.filename):
+            flash("Supported formats: CSV, XLSX, XLS")
+            return redirect(request.url)
+
+        filename = secure_filename(file.filename)
+        path     = unique_path(app.config["UPLOAD_FOLDER"], filename)
+        file.save(path)
+        size_mb  = os.path.getsize(path) / (1024 * 1024)
+        session["uploaded_filename"] = os.path.basename(path)
+        session.permanent = True
+        app.logger.info("Saved %s (%.2f MB)", path, size_mb)
+        return redirect(url_for("results"))
+
+    return render_template("upload.html",
+                           uploaded_filename=session.get("uploaded_filename"))
 
 
 @app.route("/results")
 def results():
     try:
-        uploaded_basename = session.get("uploaded_filename", None)
-        if not uploaded_basename:
-            flash("No file available for analysis. Please upload a CSV first.")
+        basename = session.get("uploaded_filename")
+        if not basename:
+            flash("No file uploaded. Please upload a dataset first.")
             return redirect(url_for("upload_file"))
 
-        full_path = os.path.join(app.config["UPLOAD_FOLDER"], uploaded_basename)
+        full_path = os.path.join(app.config["UPLOAD_FOLDER"], basename)
         if not os.path.exists(full_path):
-            flash("Uploaded file missing on server. Please re-upload.")
+            flash("File missing — please re-upload.")
             session.pop("uploaded_filename", None)
             return redirect(url_for("upload_file"))
-        
-        # Clean up old files to keep storage usage low
+
         cleanup_old_files()
 
-        file_size_mb = os.path.getsize(full_path) / (1024 * 1024)
-        app.logger.info("Preparing analysis for %s (%.2f MB)", full_path, file_size_mb)
-
-        # Try reading the full file, fallback to sample if memory fails or other errors
-        df = None
-        loaded_full = False
+        # ── Load ──
+        ext = basename.rsplit(".", 1)[-1].lower()
         try:
-            df = pd.read_csv(full_path, low_memory=False, parse_dates=True)
-            loaded_full = True
-            app.logger.info("Loaded full CSV with shape %s", df.shape)
-        except MemoryError:
-            app.logger.exception("MemoryError while reading full CSV - will try sample")
-        except Exception as e:
-            app.logger.warning("Could not read full CSV (%s). Will attempt to read sample. Trace: %s", e, traceback.format_exc())
-
-        if not loaded_full:
-            try:
-                chunks = pd.read_csv(full_path, chunksize=100000, parse_dates=True)
-                df_sample = next(chunks)
-                df = df_sample
-                flash("Full file could not be loaded into memory. Analysis performed on a 100k-row sample.")
-                app.logger.info("Loaded sample from CSV with shape %s", df.shape)
-            except Exception as e:
-                app.logger.exception("Failed to read sample from CSV: %s", e)
-                flash(f"Failed to read file for analysis: {e}")
+            if ext == "csv":
+                df = pd.read_csv(full_path, low_memory=False, parse_dates=True)
+            elif ext in ["xlsx", "xls"]:
+                df = pd.read_excel(full_path, engine="openpyxl" if ext == "xlsx" else "xlrd")
+            else:
+                flash(f"Unsupported file format: {ext}. Use CSV, XLSX, or XLS.")
                 return redirect(url_for("upload_file"))
-        
-        if df is None or len(df) == 0:
-            flash("Dataset is empty. Please upload a file with data.")
+            app.logger.info("Loaded %s shape=%s", basename, df.shape)
+        except MemoryError:
+            try:
+                df = pd.read_csv(full_path, nrows=100_000, parse_dates=True)
+                flash("File too large for full load — analysing first 100k rows.")
+            except Exception as e:
+                flash(f"File too large and failed to load partial data: {str(e)[:100]}")
+                return redirect(url_for("upload_file"))
+        except Exception as e:
+            app.logger.error("File load failed: %s", e)
+            flash(f"Failed to load file: {str(e)[:150]}. Check file format and structure.")
             return redirect(url_for("upload_file"))
-        
-        # --- Convert datetime columns to year/month/day ---
+
+        if df is None or df.empty:
+            flash("Dataset is empty or could not be read.")
+            return redirect(url_for("upload_file"))
+
+        # ── Convert datetime columns ──
         df = convert_datetime_columns(df)
 
-        # --- CLEANING STEP: remove nulls and duplicates ---
-        before_shape = df.shape
-        df = df.dropna().drop_duplicates()
-        after_shape = df.shape
-        app.logger.info("Cleaned dataset: from %s to %s (removed nulls & duplicates)", before_shape, after_shape)
+        # ── Light cleaning (keep NaN so ML can impute; only drop all-NaN rows) ──
+        df = df.dropna(how="all").drop_duplicates()
 
-        if len(df) == 0:
-            flash("Dataset became empty after cleaning (all rows had missing values). Please check your data.")
+        if df.empty:
+            flash("Dataset empty after cleaning.")
             return redirect(url_for("upload_file"))
 
-        # Use df for summary
-        summary_source = "full file" if loaded_full else "sample"
-        summary_df = dataset_summary(df)
+        # Sample for ML / plots if huge
+        if len(df) > 200_000:
+            sample_df = df.sample(n=200_000, random_state=42)
+        else:
+            sample_df = df
 
-        # Rows / cols
-        rows, cols = df.shape
+        rows, cols = sample_df.shape
 
-        # Prepare sample_for_plots: if dataset too big, sample up to 100k rows
+        # ── Column classification ──
         try:
-            if len(df) > 100000:
-                sample_for_plots = df.sample(n=100000, random_state=42)
-            else:
-                sample_for_plots = df
-        except Exception:
-            sample_for_plots = df.head(100000)
-
-        # Render head (sample)
-        head_html = sample_for_plots.head(10).to_html(classes="table-sample", index=False, escape=False)
-        summary_html = summary_df.to_html(classes="invisible-border-table", index=False, float_format="%.3f", na_rep="")
-
-        # Run Fintech ML Analysis
-        ml_results = perform_fintech_analysis(sample_for_plots)
-
-        # Generate plots
-        prefix = os.path.splitext(uploaded_basename)[0]
-        try:
-            plots = generate_plots(sample_for_plots, prefix, ml_results=ml_results)
+            roles        = classify_columns(sample_df)
+            dataset_type = detect_dataset_type(sample_df, roles)
+            app.logger.info("Dataset type: %s", dataset_type)
         except Exception as e:
-            app.logger.exception("Failed to generate plots: %s", e)
-            plots = []
-            flash("Warning: Some visualizations could not be generated.")
+            app.logger.exception("Column classification failed: %s", e)
+            flash(f"Column classification failed: {str(e)[:100]}")
+            return redirect(url_for("upload_file"))
 
-        # Generate explanations
-        dataset_explanation = generate_dataset_explanation(df, uploaded_basename, summary_source)
-        chart_explanations = generate_chart_explanations()
-        
-        # Generate AI insights
-        app.logger.info("Generating AI insights...")
-        ai_insights = generate_ai_insights(df, ml_results, dataset_explanation)
+        # ── ML Pipeline ──
+        try:
+            app.logger.info("Running ML pipeline…")
+            ml_results = run_ml_pipeline(sample_df, roles, dataset_type)
+        except Exception as e:
+            app.logger.exception("ML pipeline failed: %s", e)
+            flash(f"ML analysis failed: {str(e)[:150]}. Try a different dataset.")
+            return redirect(url_for("upload_file"))
 
-        return render_template("results.html",
-                               filename=uploaded_basename,
-                               rows=rows,
-                               cols=cols,
-                               head=head_html,
-                               summary_html=summary_html,
-                               plots=plots,
-                               summary_source=summary_source,
-                               ml_results=ml_results,
-                               dataset_explanation=dataset_explanation,
-                               chart_explanations=chart_explanations,
-                               ai_insights=ai_insights)
+        # ── KPIs ──
+        try:
+            kpis = compute_financial_kpis(sample_df, roles, ml_results)
+        except Exception as e:
+            app.logger.exception("KPI computation failed: %s", e)
+            kpis = {"total_records": len(sample_df), "fraud_count": 0}
+
+        # ── Insights ──
+        try:
+            insights = generate_financial_insights(sample_df, ml_results, kpis, roles, dataset_type)
+        except Exception as e:
+            app.logger.exception("Insights generation failed: %s", e)
+            insights = {"headline": "Analysis complete", "recommendations": []}
+
+        # ── Plots ──
+        prefix = os.path.splitext(basename)[0]
+        plots = []
+        try:
+            plots = generate_plots(sample_df, prefix, ml_results, roles, dataset_type)
+        except Exception as e:
+            app.logger.exception("Plot generation failed: %s", e)
+            flash("Some visualizations could not be generated, but analysis is complete.")
+
+        # ── Summary table ──
+        summary_df   = dataset_summary(sample_df)
+        summary_html = summary_df.to_html(classes="summary-table", index=False,
+                                          float_format="%.4f", na_rep="—")
+        head_html    = sample_df.head(15).to_html(classes="data-table", index=False,
+                                                   escape=False)
+
+        return render_template(
+            "results.html",
+            filename=basename,
+            rows=rows,
+            cols=cols,
+            dataset_type=dataset_type,
+            roles=roles,
+            head_html=head_html,
+            summary_html=summary_html,
+            plots=plots,
+            ml_results=ml_results,
+            kpis=kpis,
+            financial_kpis=kpis,
+            insights=insights,
+        )
+
     except Exception as e:
-        app.logger.exception("Unexpected error in results endpoint: %s", e)
-        flash(f"An unexpected error occurred: {e}")
+        app.logger.exception("Unexpected error in /results: %s", e)
+        flash(f"Analysis failed: {e}")
         return redirect(url_for("upload_file"))
 
 
-# Friendly error message for oversized payloads
 @app.errorhandler(413)
 def too_large(e):
-    return "File is too large! Please upload a file smaller than 500 MB.", 413
+    return "File too large (max 500 MB).", 413
 
 
 if __name__ == "__main__":
-    app.run(debug=False, threaded=True)  # debug=False for faster performance
+    app.run(debug=True, threaded=True)
