@@ -2,7 +2,7 @@
 
 **Website Link : https://finance-data-analysis.onrender.com/**
 
-**DataInsight Analytics** is a full-stack web application that provides automated, comprehensive data analysis and visualization for CSV datasets. The platform demonstrates professional software development practices, clean UI/UX design, and advanced data analytics capabilities.
+**FinSight Analytics** is a full-stack web application that provides automated, comprehensive data analysis and visualization for CSV datasets. The platform demonstrates professional software development practices, clean UI/UX design, and advanced data analytics capabilities.
 
 ## ✨ Key Features
 
