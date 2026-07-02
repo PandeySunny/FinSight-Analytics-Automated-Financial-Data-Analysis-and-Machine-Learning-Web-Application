@@ -76,40 +76,64 @@
 - **Output**: Ranked feature importance, correlation heatmaps
 
 ## Workflow
-              User Uploads Dataset
-                     │
-                     ▼
-            CSV / Excel Reader
-                     │
-                     ▼
-               Data Cleaning
-                     │
-                     ▼
-           Feature Engineering
-                     │
-                     ▼
-        StandardScaler + LabelEncoder
-                     │
-                     ▼
-        Financial Dataset Detection
-                     │
-                     ▼
-          Machine Learning Pipeline
-                     │
- ┌──────┼────────┬────────┬─────────┬──────────┐
- │      │        │        │         │          │
- ▼      ▼        ▼        ▼         ▼          ▼
-Isolation Forest KMeans   PCA   Gradient   Market
-                         Boosting Analysis
-                     │
-                     ▼
-            Charts + KPIs + Insights
-                     │
-                     ▼
-              Flask Dashboard
-                     │
-                     ▼
-            Business Intelligence
+                                     👤 USER
+                          │
+                          ▼
+                 ┌────────────────┐
+                 │  Flask Website │
+                 └────────────────┘
+                          │
+          ┌───────────────┼────────────────┐
+          │               │                │
+          ▼               ▼                ▼
+   File Upload      Data Validation    Session
+          │
+          ▼
+ ┌──────────────────────────────┐
+ │     Data Preprocessing        │
+ │──────────────────────────────│
+ │ • Missing Values             │
+ │ • Duplicate Removal          │
+ │ • Encoding                   │
+ │ • Scaling                    │
+ │ • Date Feature Extraction    │
+ └──────────────────────────────┘
+               │
+               ▼
+ ┌──────────────────────────────────────────────┐
+ │         Machine Learning Engine              │
+ │──────────────────────────────────────────────│
+ │ Isolation Forest     → Fraud Detection       │
+ │ K-Means              → Customer Segments     │
+ │ Gradient Boosting    → Fraud Prediction      │
+ │ PCA                  → Dimensionality Reduce │
+ │ Risk Scoring         → Risk Tier             │
+ │ Market Analysis      → RSI, Sharpe, Volatility│
+ │ Time-Series Analysis → Trends                │
+ └──────────────────────────────────────────────┘
+               │
+               ▼
+ ┌──────────────────────────────────────────────┐
+ │        Visualization & Analytics             │
+ │──────────────────────────────────────────────│
+ │ PCA Plot                                    │
+ │ Cluster Plot                                │
+ │ Heatmap                                     │
+ │ Feature Importance                          │
+ │ Risk Distribution                           │
+ │ Time-Series Graph                           │
+ └──────────────────────────────────────────────┘
+               │
+               ▼
+ ┌──────────────────────────────────────────────┐
+ │          Results Dashboard                   │
+ │──────────────────────────────────────────────│
+ │ Fraud Rate                                  │
+ │ Customer Segments                           │
+ │ Risk Analysis                               │
+ │ KPIs                                        │
+ │ ML Performance                              │
+ └──────────────────────────────────────────────┘
 
 
 
