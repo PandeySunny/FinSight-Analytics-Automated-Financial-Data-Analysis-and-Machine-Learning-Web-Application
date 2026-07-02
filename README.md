@@ -75,35 +75,43 @@
   - Feature relationship mapping
 - **Output**: Ranked feature importance, correlation heatmaps
 
-## Graphical Representation
-
-                  User
-                    │
-                    ▼
-         Upload CSV / Excel File
-                    │
-                    ▼
-            Flask Backend (app.py)
-                    │
-      ┌─────────────┴──────────────┐
-      │                            │
-Data Preprocessing           Dataset Detection
-      │                            │
-      └─────────────┬──────────────┘
-                    ▼
+## Workflow
+              User Uploads Dataset
+                     │
+                     ▼
+            CSV / Excel Reader
+                     │
+                     ▼
+               Data Cleaning
+                     │
+                     ▼
+           Feature Engineering
+                     │
+                     ▼
+        StandardScaler + LabelEncoder
+                     │
+                     ▼
+        Financial Dataset Detection
+                     │
+                     ▼
           Machine Learning Pipeline
-                    │
- ┌─────────┬──────────┬─────────┬─────────┐
- │         │          │         │         │
- ▼         ▼          ▼         ▼         ▼
-Isolation KMeans    PCA     Gradient   Market
-Forest              Analysis Boosting  Metrics
-                    │
-                    ▼
-         Graphs + KPIs + Insights
-                    │
-                    ▼
-            Results Dashboard
+                     │
+ ┌──────┼────────┬────────┬─────────┬──────────┐
+ │      │        │        │         │          │
+ ▼      ▼        ▼        ▼         ▼          ▼
+Isolation Forest KMeans   PCA   Gradient   Market
+                         Boosting Analysis
+                     │
+                     ▼
+            Charts + KPIs + Insights
+                     │
+                     ▼
+              Flask Dashboard
+                     │
+                     ▼
+            Business Intelligence
+
+
 
 ## ✨ Key Features
 
