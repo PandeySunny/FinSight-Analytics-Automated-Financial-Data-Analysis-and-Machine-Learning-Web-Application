@@ -75,6 +75,36 @@
   - Feature relationship mapping
 - **Output**: Ranked feature importance, correlation heatmaps
 
+## Graphical Representation
+
+                  User
+                    │
+                    ▼
+         Upload CSV / Excel File
+                    │
+                    ▼
+            Flask Backend (app.py)
+                    │
+      ┌─────────────┴──────────────┐
+      │                            │
+Data Preprocessing           Dataset Detection
+      │                            │
+      └─────────────┬──────────────┘
+                    ▼
+          Machine Learning Pipeline
+                    │
+ ┌─────────┬──────────┬─────────┬─────────┐
+ │         │          │         │         │
+ ▼         ▼          ▼         ▼         ▼
+Isolation KMeans    PCA     Gradient   Market
+Forest              Analysis Boosting  Metrics
+                    │
+                    ▼
+         Graphs + KPIs + Insights
+                    │
+                    ▼
+            Results Dashboard
+
 ## ✨ Key Features
 
 ### Automated Analysis
